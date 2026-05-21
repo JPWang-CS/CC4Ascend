@@ -1,5 +1,6 @@
 # AscendC Expert Memory Index
 
+- [硬件规格速查](AscendC-expert/hardware-specs.md) — A2A3(910B) 与 A5(950) 芯片硬件规格速查表
 - [核间同步专家技巧](AscendC-expert/expert-cross-core-sync.md) — A5 CrossCoreSetFlag/WaitFlag 死锁排查与同步模式
 - [性能调优专家技巧](AscendC-expert/expert-performance-tuning.md) — A5 性能反模式排查清单与通用分析流程
 - [Cube-Vector 融合专家技巧](AscendC-expert/expert-cv-fusion.md) — L0C2UB/UB2L1 直连通路使用与同步时序

@@ -50,11 +50,12 @@ CalcRealCoreIdx(relativePos, times, offsetCoreIdx, isPartialCalc);
 
 ```
         A2A3       A5        变化
+总AI核: 24     →   36        (+50%)
 L0C:    128KB  →   256KB     (2x!)
-UB:     192KB  →   256KB     (+33%)
+UB:     192KB  →   248KB     (+29%)
 BIAS:   1KB    →   4KB       (4x)
-FIXBUF: 7KB    →   16KB      (2.3x)
-L1:     512KB  →   512KB     (不变)
+L2:     192MB  →   128MB     (-33%)
+L1:     —      →   512KB     (新增)
 L0A/B:  64KB   →   64KB      (不变)
 ```
 
