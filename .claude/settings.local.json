@@ -3,7 +3,9 @@
     "allow": [
       "WebFetch(domain:www.hiascend.com)",
       "WebSearch",
-      "Bash(git *)"
+      "Bash(git *)",
+      "WebFetch(domain:gitcode.com)",
+      "WebFetch(domain:gitee.com)"
     ]
   }
 }
