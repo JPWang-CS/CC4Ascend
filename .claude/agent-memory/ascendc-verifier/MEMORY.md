@@ -1,0 +1,2 @@
+- [omni-ops build model facts](omni-ops-build-model-facts.md) — verified build.sh flags, glob depth, default SOC, add_modules_sources absence, vendor_name isolation
+- [QBMM migration dep surface](qbmm-migration-dep-surface.md) — cross-op + matmul/common deps actually needed (more than architect's plan listed)

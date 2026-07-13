@@ -1,0 +1,660 @@
+root@localhost:/home/w00939120/code/qbmm-batch/ops-nn# python /home/w00939120/code/qbmm-batch/golden_mx_matmul_batch.py
+MX Golden+NPU (batch)  cases=77  npu=ON
+
+============================================================
+  1b_fp8_basic  M=64 N=128 K=256  x=fp8_e4m3fn out=float16  batch_x1=2 batch_x2=2
+  golden: (2, 64, 128) torch.float16  [-11664.00, 15664.00]
+  npu:    (2, 64, 128) torch.float32  [-11664.00, 15664.00]
+  -> PASS  diff=0.000000  cos=1.000000
+
+============================================================
+  1b_fp8_bias  M=64 N=128 K=256  x=fp8_e4m3fn out=float16  batch_x1=2 batch_x2=2
+  golden: (2, 64, 128) torch.float16  [-13992.00, 16104.00]
+  npu:    (2, 64, 128) torch.float32  [-13992.00, 16104.00]
+  -> PASS  diff=0.003906  cos=1.000000
+
+============================================================
+  1b_fp8_bf16  M=64 N=128 K=256  x=fp8_e4m3fn out=bfloat16  batch_x1=2 batch_x2=2
+  golden: (2, 64, 128) torch.bfloat16  [-12288.00, 14848.00]
+  npu:    (2, 64, 128) torch.float32  [-12288.00, 14848.00]
+  -> PASS  diff=0.000000  cos=0.999997
+
+============================================================
+  1b_fp8_fp32  M=64 N=128 K=256  x=fp8_e4m3fn out=float32  batch_x1=2 batch_x2=2
+  golden: (2, 64, 128) torch.float32  [-10067.62, 12955.75]
+  npu:    (2, 64, 128) torch.float32  [-10067.62, 12955.75]
+  -> PASS  diff=0.000000  cos=1.000000
+
+============================================================
+  1b_fp8_oddK  M=64 N=128 K=200  x=fp8_e4m3fn out=float16  batch_x1=2 batch_x2=2
+  golden: (2, 64, 128) torch.float16  [-13752.00, 13552.00]
+  npu:    (2, 64, 128) torch.float32  [-13752.00, 13552.00]
+  -> PASS  diff=0.000000  cos=1.000000
+
+============================================================
+  1b_fp8_B8  M=64 N=128 K=256  x=fp8_e4m3fn out=float16  batch_x1=8 batch_x2=8
+  golden: (8, 64, 128) torch.float16  [-17264.00, 15088.00]
+  npu:    (8, 64, 128) torch.float32  [-17264.00, 15088.00]
+  -> PASS  diff=0.000000  cos=1.000000
+
+============================================================
+  2b_fp8_basic  M=64 N=128 K=256  x=fp8_e4m3fn out=float16  batch_x1=2x3 batch_x2=2x3
+  golden: (2, 3, 64, 128) torch.float16  [-12280.00, 16832.00]
+  npu:    (2, 3, 64, 128) torch.float32  [-12280.00, 16832.00]
+  -> PASS  diff=0.000000  cos=1.000000
+
+============================================================
+  2b_fp8_bias  M=64 N=128 K=256  x=fp8_e4m3fn out=bfloat16  batch_x1=2x3 batch_x2=2x3
+  golden: (2, 3, 64, 128) torch.bfloat16  [-15680.00, 15936.00]
+  npu:    (2, 3, 64, 128) torch.float32  [-15680.00, 15936.00]
+  -> PASS  diff=0.003906  cos=0.999998
+
+============================================================
+  3b_fp8_basic  M=64 N=128 K=256  x=fp8_e4m3fn out=float16  batch_x1=2x2x2 batch_x2=2x2x2
+  golden: (2, 2, 2, 64, 128) torch.float16  [-13864.00, 16768.00]
+  npu:    (2, 2, 2, 64, 128) torch.float32  [-13864.00, 16768.00]
+  -> PASS  diff=0.000000  cos=1.000000
+
+============================================================
+  4b_fp8_basic  M=32 N=64 K=128  x=fp8_e4m3fn out=bfloat16  batch_x1=2x2x2x2 batch_x2=2x2x2x2
+  golden: (2, 2, 2, 2, 32, 64) torch.bfloat16  [-11072.00, 13888.00]
+  npu:    (2, 2, 2, 2, 32, 64) torch.float32  [-11072.00, 13888.00]
+  -> PASS  diff=0.000000  cos=1.000000
+
+============================================================
+  1b_fp8_M1  M=1 N=128 K=256  x=fp8_e4m3fn out=float16  batch_x1=2 batch_x2=2
+  golden: (2, 1, 128) torch.float16  [-3780.00, 10480.00]
+  npu:    (2, 1, 128) torch.float32  [-3780.00, 10480.00]
+  -> PASS  diff=0.000000  cos=1.000000
+
+============================================================
+  1b_fp8_N1  M=64 N=1 K=256  x=fp8_e4m3fn out=float16  batch_x1=2 batch_x2=2
+  golden: (2, 64, 1) torch.float16  [-6344.00, 4104.00]
+  npu:    (2, 64, 1) torch.float32  [-6344.00, 4104.00]
+  -> PASS  diff=0.000000  cos=1.000000
+
+============================================================
+  bcast_B_fp8  M=64 N=128 K=256  x=fp8_e4m3fn out=float16  batch_x1=3 batch_x2=1
+  golden: (3, 64, 128) torch.float16  [-13648.00, 17424.00]
+  npu:    (3, 64, 128) torch.float32  [-13648.00, 17424.00]
+  -> PASS  diff=0.000000  cos=1.000000
+
+============================================================
+  bcast_A_fp8  M=64 N=128 K=256  x=fp8_e4m3fn out=float16  batch_x1=1 batch_x2=3
+  golden: (3, 64, 128) torch.float16  [-12008.00, 14336.00]
+  npu:    (3, 64, 128) torch.float32  [-12008.00, 14336.00]
+  -> PASS  diff=0.000000  cos=1.000000
+
+============================================================
+  3b_fp4_chk5  M=64 N=128 K=256  x=fp4_e2m1 out=bfloat16  batch_x1=3 batch_x2=3
+均值=0.05, 方差=4
+result_shape is ========== [3, 64, 4, 2]
+result_shape is ========== [3, 128, 4, 2]
+  golden: (3, 64, 128) torch.bfloat16  [-1040.00, 1184.00]
+  npu:    (3, 64, 128) torch.float32  [-1040.00, 1184.00]
+  -> PASS  diff=0.000000  cos=0.999990
+
+============================================================
+  1b_fp4_basic  M=64 N=128 K=256  x=fp4_e2m1 out=bfloat16  batch_x1=2 batch_x2=2
+均值=0.05, 方差=4
+result_shape is ========== [2, 64, 4, 2]
+result_shape is ========== [2, 128, 4, 2]
+  golden: (2, 64, 128) torch.bfloat16  [-1008.00, 872.00]
+  npu:    (2, 64, 128) torch.float32  [-1008.00, 872.00]
+  -> PASS  diff=0.000000  cos=0.999990
+
+============================================================
+  2b_fp4_basic  M=64 N=128 K=256  x=fp4_e2m1 out=bfloat16  batch_x1=2x3 batch_x2=2x3
+均值=0.05, 方差=4
+result_shape is ========== [2, 3, 64, 4, 2]
+result_shape is ========== [2, 3, 128, 4, 2]
+  golden: (2, 3, 64, 128) torch.bfloat16  [-1224.00, 1176.00]
+  npu:    (2, 3, 64, 128) torch.float32  [-1224.00, 1176.00]
+  -> PASS  diff=0.000000  cos=0.999989
+
+============================================================
+  1b_fp4_bias  M=64 N=128 K=256  x=fp4_e2m1 out=bfloat16  batch_x1=2 batch_x2=2
+均值=0.05, 方差=4
+result_shape is ========== [2, 64, 4, 2]
+result_shape is ========== [2, 128, 4, 2]
+  golden: (2, 64, 128) torch.bfloat16  [-1120.00, 904.00]
+  npu:    (2, 64, 128) torch.float32  [-1120.00, 904.00]
+  -> PASS  diff=0.003906  cos=0.999994
+
+============================================================
+  1b_fp4_oddK  M=64 N=128 K=160  x=fp4_e2m1 out=bfloat16  batch_x1=2 batch_x2=2
+均值=0.05, 方差=4
+result_shape is ========== [2, 64, 3, 2]
+result_shape is ========== [2, 128, 3, 2]
+  golden: (2, 64, 128) torch.bfloat16  [-876.00, 944.00]
+  npu:    (2, 64, 128) torch.float32  [-876.00, 944.00]
+  -> PASS  diff=0.000000  cos=0.999996
+
+============================================================
+  1b_fp8_tx2  M=64 N=128 K=256  x=fp8_e4m3fn out=float16  batch_x1=2 batch_x2=2
+  golden: (2, 64, 128) torch.float16  [-10336.00, 12376.00]
+  npu:    (2, 64, 128) torch.float32  [-10336.00, 12376.00]
+  -> PASS  diff=0.000000  cos=1.000000
+
+============================================================
+  1b_fp8_tx1  M=64 N=128 K=256  x=fp8_e4m3fn out=float16  batch_x1=2 batch_x2=2
+  golden: (2, 64, 128) torch.float16  [-12688.00, 14048.00]
+  npu:    (2, 64, 128) torch.float32  [-12688.00, 14048.00]
+  -> PASS  diff=0.000000  cos=1.000000
+
+============================================================
+  1b_fp8_tx1x2  M=64 N=128 K=256  x=fp8_e4m3fn out=float16  batch_x1=2 batch_x2=2
+  golden: (2, 64, 128) torch.float16  [-10248.00, 16112.00]
+  npu:    (2, 64, 128) torch.float32  [-10248.00, 16112.00]
+  -> PASS  diff=0.000000  cos=1.000000
+
+============================================================
+  2b_fp8_tx1x2  M=64 N=128 K=256  x=fp8_e4m3fn out=bfloat16  batch_x1=2x3 batch_x2=2x3
+  golden: (2, 3, 64, 128) torch.bfloat16  [-12736.00, 16000.00]
+  npu:    (2, 3, 64, 128) torch.float32  [-12736.00, 16000.00]
+  -> PASS  diff=0.000000  cos=0.999998
+
+============================================================
+  1b_fp4_nN2  M=64 N=2 K=256  x=fp4_e2m1 out=bfloat16  batch_x1=2 batch_x2=2
+均值=0.05, 方差=4
+result_shape is ========== [2, 64, 4, 2]
+result_shape is ========== [2, 2, 4, 2]
+  golden: (2, 64, 2) torch.bfloat16  [-604.00, 696.00]
+  npu:    (2, 64, 2) torch.float32  [-604.00, 696.00]
+  -> PASS  diff=0.000000  cos=1.000000
+
+============================================================
+  1b_fp4_nN1  M=64 N=1 K=256  x=fp4_e2m1 out=bfloat16  batch_x1=2 batch_x2=2
+均值=0.05, 方差=4
+result_shape is ========== [2, 64, 4, 2]
+result_shape is ========== [2, 1, 4, 2]
+  golden: (2, 64, 1) torch.bfloat16  [-600.00, 568.00]
+  npu:    (2, 64, 1) torch.float32  [-600.00, 568.00]
+  -> PASS  diff=0.000000  cos=1.000000
+
+============================================================
+  1b_fp4_oddInner_fail  M=64 N=128 K=255  x=fp4_e2m1 out=bfloat16  batch_x1=2 batch_x2=2
+  golden: (2, 64, 128) torch.bfloat16  [-1168.00, 1288.00]
+  -> PASS  (expect_fail: NPU 按预期拒绝 ->         Solution: Check whether the parameter values meet the condition.)
+
+============================================================
+  nobatch_fp8  M=64 N=128 K=256  x=fp8_e4m3fn out=float16  batch_x1= batch_x2=
+  golden: (64, 128) torch.float16  [-11624.00, 14536.00]
+  npu:    (64, 128) torch.float32  [-11624.00, 14536.00]
+  -> PASS  diff=0.000000  cos=1.000000
+
+============================================================
+  nobatch_fp8_tx2  M=64 N=128 K=256  x=fp8_e4m3fn out=float16  batch_x1= batch_x2=
+  golden: (64, 128) torch.float16  [-11912.00, 13488.00]
+  npu:    (64, 128) torch.float32  [-11912.00, 13488.00]
+  -> PASS  diff=0.000000  cos=1.000002
+
+============================================================
+  nobatch_fp4  M=64 N=128 K=256  x=fp4_e2m1 out=bfloat16  batch_x1= batch_x2=
+均值=0.05, 方差=4
+result_shape is ========== [64, 4, 2]
+result_shape is ========== [128, 4, 2]
+  golden: (64, 128) torch.bfloat16  [-920.00, 956.00]
+  npu:    (64, 128) torch.float32  [-920.00, 956.00]
+  -> PASS  diff=0.000000  cos=0.999993
+
+============================================================
+  1b_fp8_basic_nz  M=64 N=128 K=256  x=fp8_e4m3fn out=float16  batch_x1=2 batch_x2=2
+  golden: (2, 64, 128) torch.float16  [-11824.00, 16768.00]
+[E702 22:10:24.939671740 OpParamMaker.cpp:454] operator():third_party/op-plugin/op_plugin/ops/opapi/QuantMatmulKernelNpuOpApi.cpp:298 NPU function error: device error type 0, error code is 561103
+[ERROR] 2026-07-02-22:10:24 (PID:774, Device:5, RankID:-1) ERR00100 PTA call acl api failed.
+[PID: 774] 2026-07-02-22:10:24.601.371 Invalid_Argument(EZ0027): Parameters groupSizeM, groupSizeN, groupSizeK of QuantBatchMatmulV3 have incorrect values 32, 32, 32. Reason: when the quantization mode is mx, input or inferred [groupSizeM, groupSizeN, groupSizeK] must be [1, 1, 32], groupSize = groupSizeK | groupSizeN << 16 | groupSizeM << 32.
+        Solution: Check whether the parameter values meet the condition.
+TraceBack (most recent call last):
+        op[QuantBatchMatmulV3], Fail to analyze context info.[FUNC:GetShapeAttrsInfo][FILE:quant_batch_matmul_v3_tiling_base.cpp][LINE:151]
+        Failed to execute operator aclnnQuantMatmulWeightNz_103_QuantBatchMatmulV3. Reason: Failed to execute tiling.
+        Kernel Run failed. opType: 4, QuantBatchMatmulV3
+        launch failed for QuantBatchMatmulV3, errno:561103.
+
+Exception raised from operator() at third_party/op-plugin/op_plugin/ops/opapi/QuantMatmulKernelNpuOpApi.cpp:298 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) + 0xc8 (0xffff79095978 in /usr/local/lib/python3.13/site-packages/torch/lib/libc10.so)
+frame #1: c10::detail::torchCheckFail(char const*, char const*, unsigned int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) + 0xc4 (0xffff79039adc in /usr/local/lib/python3.13/site-packages/torch/lib/libc10.so)
+frame #2: <unknown function> + 0x26908b4 (0xfffe6ea608b4 in /usr/local/lib/python3.13/site-packages/torch_npu/lib/libtorch_npu.so)
+frame #3: <unknown function> + 0x3ae17e4 (0xfffe6feb17e4 in /usr/local/lib/python3.13/site-packages/torch_npu/lib/libtorch_npu.so)
+frame #4: <unknown function> + 0xcc31d0 (0xfffe6d0931d0 in /usr/local/lib/python3.13/site-packages/torch_npu/lib/libtorch_npu.so)
+frame #5: <unknown function> + 0xcc3e28 (0xfffe6d093e28 in /usr/local/lib/python3.13/site-packages/torch_npu/lib/libtorch_npu.so)
+frame #6: <unknown function> + 0xcc1cc8 (0xfffe6d091cc8 in /usr/local/lib/python3.13/site-packages/torch_npu/lib/libtorch_npu.so)
+frame #7: <unknown function> + 0xe8a3c (0xffff78e48a3c in /lib/aarch64-linux-gnu/libstdc++.so.6)
+frame #8: <unknown function> + 0x7d5b8 (0xffff857dd5b8 in /lib/aarch64-linux-gnu/libc.so.6)
+frame #9: <unknown function> + 0xe5edc (0xffff85845edc in /lib/aarch64-linux-gnu/libc.so.6)
+
+Traceback (most recent call last):
+  File "/home/w00939120/code/qbmm-batch/golden_mx_matmul_batch.py", line 1076, in run
+    n = call_npu(d, c, v)
+  File "/home/w00939120/code/qbmm-batch/golden_mx_matmul_batch.py", line 979, in call_npu
+    return out.float().cpu()
+           ~~~~~~~~~~~~~~~^^
+RuntimeError: The Inner error is reported as above. The process exits for this inner error, and the current working operator name is aclnnQuantMatmulWeightNz.
+Since the operator is called asynchronously, the stacktrace may be inaccurate. If you want to get the accurate stacktrace, please set the environment variable ASCEND_LAUNCH_BLOCKING=1.
+Note: ASCEND_LAUNCH_BLOCKING=1 will force ops to run in synchronous mode, resulting in performance degradation. Please unset ASCEND_LAUNCH_BLOCKING in time after debugging.
+[ERROR] 2026-07-02-22:10:24 (PID:774, Device:5, RankID:-1) ERR00100 PTA call acl api failed.
+
+
+============================================================
+  2b_fp8_basic_nz  M=64 N=128 K=256  x=fp8_e4m3fn out=float16  batch_x1=2x3 batch_x2=2x3
+  golden: (2, 3, 64, 128) torch.float16  [-15136.00, 16896.00]
+  npu:    (2, 3, 64, 128) torch.float32  [-13752.00, 14408.00]
+  -> FAIL  diff=16861.500000  cos=0.035331  fail_batches=[0, 1, 2, 3, 4, 5]
+
+============================================================
+  3b_fp8_basic_nz  M=64 N=128 K=256  x=fp8_e4m3fn out=float16  batch_x1=2x2x2 batch_x2=2x2x2
+  golden: (2, 2, 2, 64, 128) torch.float16  [-13552.00, 16800.00]
+  npu:    (2, 2, 2, 64, 128) torch.float32  [-13864.00, 16768.00]
+  -> FAIL  diff=18448.000000  cos=0.035450  fail_batches=[0, 1, 2, 3, 4, 5, 6, 7]
+
+============================================================
+  1b_fp4_basic_nz  M=64 N=128 K=256  x=fp4_e2m1 out=bfloat16  batch_x1=2 batch_x2=2
+均值=0.05, 方差=4
+result_shape is ========== [2, 64, 4, 2]
+result_shape is ========== [2, 128, 4, 2]
+  golden: (2, 64, 128) torch.bfloat16  [-1032.00, 964.00]
+  npu:    (2, 64, 128) torch.float32  [-6645093.00, 415318.31]
+  -> FAIL  diff=6645545.000000  cos=-0.011444  fail_batches=[0, 1]
+
+============================================================
+  3b_fp4_chk5_nz  M=64 N=128 K=256  x=fp4_e2m1 out=bfloat16  batch_x1=3 batch_x2=3
+均值=0.05, 方差=4
+result_shape is ========== [3, 64, 4, 2]
+result_shape is ========== [3, 128, 4, 2]
+  golden: (3, 64, 128) torch.bfloat16  [-1152.00, 1056.00]
+  npu:    (3, 64, 128) torch.float32  [-6645093.00, 415318.31]
+  -> FAIL  diff=6645428.000000  cos=-0.009348  fail_batches=[0, 1, 2]
+
+============================================================
+  1b_fp8_tx1_nz  M=64 N=128 K=256  x=fp8_e4m3fn out=float16  batch_x1=2 batch_x2=2
+  golden: (2, 64, 128) torch.float16  [-12840.00, 15744.00]
+  npu:    (2, 64, 128) torch.float32  [-6645092.00, 415318.31]
+  -> FAIL  diff=6649752.000000  cos=-0.064341  fail_batches=[0, 1]
+
+============================================================
+  1b_fp8_tx2_nz  M=64 N=128 K=256  x=fp8_e4m3fn out=float16  batch_x1=2 batch_x2=2
+  golden: (2, 64, 128) torch.float16  [-10920.00, 14544.00]
+  npu:    (2, 64, 128) torch.float32  [-6645092.00, 415318.31]
+  -> FAIL  diff=6649828.000000  cos=-0.052036  fail_batches=[0, 1]
+
+============================================================
+  1b_fp8_tx1x2_nz  M=64 N=128 K=256  x=fp8_e4m3fn out=float16  batch_x1=2 batch_x2=2
+  golden: (2, 64, 128) torch.float16  [-12304.00, 17552.00]
+  npu:    (2, 64, 128) torch.float32  [-6645092.00, 415318.31]
+  -> FAIL  diff=6650956.000000  cos=-0.070790  fail_batches=[0, 1]
+
+============================================================
+  bcast_B_fp8_nz  M=64 N=128 K=256  x=fp8_e4m3fn out=float16  batch_x1=3 batch_x2=1
+  golden: (3, 64, 128) torch.float16  [-11840.00, 15456.00]
+  npu:    (3, 64, 128) torch.float32  [-6645093.00, 415318.31]
+  -> FAIL  diff=6652832.000000  cos=-0.095420  fail_batches=[0, 1, 2]
+
+============================================================
+  bcast_A_fp8_nz  M=64 N=128 K=256  x=fp8_e4m3fn out=float16  batch_x1=1 batch_x2=3
+  golden: (3, 64, 128) torch.float16  [-13744.00, 19104.00]
+  npu:    (3, 64, 128) torch.float32  [-6645093.00, 415318.31]
+  -> FAIL  diff=6651892.000000  cos=-0.077688  fail_batches=[0, 1, 2]
+
+============================================================
+  2b_fp4_basic_nz  M=64 N=128 K=256  x=fp4_e2m1 out=bfloat16  batch_x1=2x3 batch_x2=2x3
+均值=0.05, 方差=4
+result_shape is ========== [2, 3, 64, 4, 2]
+result_shape is ========== [2, 3, 128, 4, 2]
+  golden: (2, 3, 64, 128) torch.bfloat16  [-1040.00, 1072.00]
+  npu:    (2, 3, 64, 128) torch.float32  [nan, nan]
+  -> FAIL  diff=6645512.000000  cos=-0.007996  fail_batches=[0, 1, 2, 3, 4, 5]
+
+============================================================
+  1b_fp4_bias_nz  M=64 N=128 K=256  x=fp4_e2m1 out=bfloat16  batch_x1=2 batch_x2=2
+均值=0.05, 方差=4
+result_shape is ========== [2, 64, 4, 2]
+result_shape is ========== [2, 128, 4, 2]
+  golden: (2, 64, 128) torch.bfloat16  [-1056.00, 1020.00]
+  npu:    (2, 64, 128) torch.float32  [nan, nan]
+  -> FAIL  diff=0.000000  cos=1.000000  fail_batches=[0, 1]
+
+============================================================
+  big_fp8  M=1024 N=1024 K=1024  x=fp8_e4m3fn out=float16  batch_x1=2 batch_x2=2
+  golden: (2, 1024, 1024) torch.float16  [-29040.00, 42976.00]
+  npu:    (2, 1024, 1024) torch.float32  [0.00, 0.00]
+  -> FAIL  diff=42976.000000  cos=1.000000  fail_batches=[0, 1]
+
+============================================================
+  big_fp4  M=512 N=512 K=512  x=fp4_e2m1 out=bfloat16  batch_x1=2 batch_x2=2
+均值=0.05, 方差=4
+result_shape is ========== [2, 512, 8, 2]
+result_shape is ========== [2, 512, 8, 2]
+  golden: (2, 512, 512) torch.bfloat16  [-1728.00, 1752.00]
+  npu:    (2, 512, 512) torch.float32  [-6645093.00, 415318.31]
+  -> FAIL  diff=6646140.000000  cos=-0.000105  fail_batches=[0, 1]
+
+============================================================
+  big_fp8_nz  M=512 N=512 K=512  x=fp8_e4m3fn out=float16  batch_x1=2 batch_x2=2
+  golden: (2, 512, 512) torch.float16  [-16800.00, 23536.00]
+  npu:    (2, 512, 512) torch.float32  [-6645093.00, 415318.31]
+  -> FAIL  diff=6658004.000000  cos=-0.089703  fail_batches=[0, 1]
+
+============================================================
+  K64_fp8  M=64 N=128 K=64  x=fp8_e4m3fn out=float16  batch_x1=2 batch_x2=2
+  golden: (2, 64, 128) torch.float16  [-9128.00, 10048.00]
+  npu:    (2, 64, 128) torch.float32  [-6645093.00, 415318.31]
+  -> FAIL  diff=6647340.000000  cos=-0.052809  fail_batches=[0, 1]
+
+============================================================
+  K128_fp8  M=64 N=128 K=128  x=fp8_e4m3fn out=float16  batch_x1=2 batch_x2=2
+  golden: (2, 64, 128) torch.float16  [-11872.00, 13816.00]
+  npu:    (2, 64, 128) torch.float32  [-6645093.00, 415318.25]
+  -> FAIL  diff=6647794.000000  cos=-0.056004  fail_batches=[0, 1]
+
+============================================================
+  K64_fp4  M=64 N=128 K=64  x=fp4_e2m1 out=bfloat16  batch_x1=2 batch_x2=2
+均值=0.05, 方差=4
+result_shape is ========== [2, 64, 1, 2]
+result_shape is ========== [2, 128, 1, 2]
+  golden: (2, 64, 128) torch.bfloat16  [-516.00, 540.00]
+  npu:    (2, 64, 128) torch.float32  [nan, nan]
+  -> FAIL  diff=6645229.000000  cos=0.009821  fail_batches=[0, 1]
+
+============================================================
+  K192_fp8  M=64 N=128 K=192  x=fp8_e4m3fn out=float16  batch_x1=2 batch_x2=2
+  golden: (2, 64, 128) torch.float16  [-10400.00, 16736.00]
+  npu:    (2, 64, 128) torch.float32  [-6645093.00, 415318.31]
+  -> FAIL  diff=6648752.000000  cos=-0.052739  fail_batches=[0, 1]
+
+============================================================
+  N48_fp8  M=64 N=48 K=256  x=fp8_e4m3fn out=float16  batch_x1=2 batch_x2=2
+  golden: (2, 64, 48) torch.float16  [-14096.00, 13432.00]
+  npu:    (2, 64, 48) torch.float32  [nan, nan]
+  -> FAIL  diff=6650420.000000  cos=-0.058239  fail_batches=[0, 1]
+
+============================================================
+  M33_fp8  M=33 N=128 K=256  x=fp8_e4m3fn out=float16  batch_x1=2 batch_x2=2
+  golden: (2, 33, 128) torch.float16  [-10816.00, 12768.00]
+  npu:    (2, 33, 128) torch.float32  [-6645088.00, 415318.25]
+  -> FAIL  diff=6647964.000000  cos=-0.053426  fail_batches=[0, 1]
+
+============================================================
+  K300_fp4  M=64 N=128 K=300  x=fp4_e2m1 out=bfloat16  batch_x1=2 batch_x2=2
+均值=0.05, 方差=4
+result_shape is ========== [2, 64, 5, 2]
+result_shape is ========== [2, 128, 5, 2]
+  golden: (2, 64, 128) torch.bfloat16  [-1020.00, 964.00]
+  npu:    (2, 64, 128) torch.float32  [-6645093.00, 415318.25]
+  -> FAIL  diff=6645405.000000  cos=-0.005214  fail_batches=[0, 1]
+
+============================================================
+  1b_fp4_tx2  M=64 N=128 K=256  x=fp4_e2m1 out=bfloat16  batch_x1=2 batch_x2=2
+均值=0.05, 方差=4
+result_shape is ========== [2, 64, 4, 2]
+result_shape is ========== [2, 128, 4, 2]
+  golden: (2, 64, 128) torch.bfloat16  [-908.00, 944.00]
+  npu:    (2, 64, 128) torch.float32  [-6645093.00, 415318.25]
+  -> FAIL  diff=6645636.000000  cos=-0.014035  fail_batches=[0, 1]
+
+============================================================
+  1b_fp4_tx2_nz  M=64 N=128 K=256  x=fp4_e2m1 out=bfloat16  batch_x1=2 batch_x2=2
+均值=0.05, 方差=4
+result_shape is ========== [2, 64, 4, 2]
+result_shape is ========== [2, 128, 4, 2]
+  golden: (2, 64, 128) torch.bfloat16  [-988.00, 1072.00]
+  npu:    (2, 64, 128) torch.float32  [-6645093.00, 415318.25]
+  -> FAIL  diff=6645518.000000  cos=-0.012227  fail_batches=[0, 1]
+
+============================================================
+  2layer_fp4_tx2_nz  M=64 N=128 K=256  x=fp4_e2m1 out=bfloat16  batch_x1=2x2 batch_x2=2x2
+均值=0.05, 方差=4
+result_shape is ========== [2, 2, 64, 4, 2]
+result_shape is ========== [2, 2, 128, 4, 2]
+  golden: (2, 2, 64, 128) torch.bfloat16  [-1040.00, 1024.00]
+  npu:    (2, 2, 64, 128) torch.float32  [-6645093.00, 415318.31]
+  -> FAIL  diff=6645642.000000  cos=-0.011624  fail_batches=[0, 1, 2, 3]
+
+============================================================
+  3layer_fp4_tx2_nz  M=64 N=128 K=256  x=fp4_e2m1 out=bfloat16  batch_x1=2x2x2 batch_x2=2x2x2
+均值=0.05, 方差=4
+result_shape is ========== [2, 2, 2, 64, 4, 2]
+result_shape is ========== [2, 2, 2, 128, 4, 2]
+  golden: (2, 2, 2, 64, 128) torch.bfloat16  [-1136.00, 1040.00]
+  npu:    (2, 2, 2, 64, 128) torch.float32  [nan, nan]
+  -> FAIL  diff=6645824.000000  cos=-0.018695  fail_batches=[0, 1, 2, 3, 4, 5, 6, 7]
+
+============================================================
+  4layer_fp4_tx2_nz  M=64 N=128 K=256  x=fp4_e2m1 out=bfloat16  batch_x1=2x2x2x2 batch_x2=2x2x2x2
+均值=0.05, 方差=4
+result_shape is ========== [2, 2, 2, 2, 64, 4, 2]
+result_shape is ========== [2, 2, 2, 2, 128, 4, 2]
+  golden: (2, 2, 2, 2, 64, 128) torch.bfloat16  [-1064.00, 1264.00]
+  npu:    (2, 2, 2, 2, 64, 128) torch.float32  [nan, nan]
+  -> FAIL  diff=6645596.000000  cos=-0.015416  fail_batches=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+
+============================================================
+  5layer_fp4_tx2_nz  M=64 N=128 K=256  x=fp4_e2m1 out=bfloat16  batch_x1=2x2x2x2x2 batch_x2=2x2x2x2x2
+均值=0.05, 方差=4
+result_shape is ========== [2, 2, 2, 2, 2, 64, 4, 2]
+result_shape is ========== [2, 2, 2, 2, 2, 128, 4, 2]
+  golden: (2, 2, 2, 2, 2, 64, 128) torch.bfloat16  [-1288.00, 1192.00]
+  -> PASS  (expect_fail: NPU 按预期拒绝 ->         Parameter srcTensor of aclnnNpuFormatCast has incorrect shape dim 7. Reason: The ViewShape dim of srcTensor must be between 2 and 6 when additionalDtype equals the dtype of srcTensor and additionalDtype is int8.)
+
+============================================================
+  6layer_fp4_tx2_nz  M=64 N=128 K=256  x=fp4_e2m1 out=bfloat16  batch_x1=2x2x2x2x2x2 batch_x2=2x2x2x2x2x2
+均值=0.05, 方差=4
+result_shape is ========== [2, 2, 2, 2, 2, 2, 64, 4, 2]
+result_shape is ========== [2, 2, 2, 2, 2, 2, 128, 4, 2]
+  golden: (2, 2, 2, 2, 2, 2, 64, 128) torch.bfloat16  [-1176.00, 1176.00]
+  -> PASS  (expect_fail: NPU 按预期拒绝 ->         Solution: Check whether the shape dimension of input/output tensor is correct.)
+
+============================================================
+  7layer_fp4_tx2_nz  M=64 N=128 K=256  x=fp4_e2m1 out=bfloat16  batch_x1=2x2x2x2x2x2x2 batch_x2=2x2x2x2x2x2x2
+均值=0.05, 方差=4
+result_shape is ========== [2, 2, 2, 2, 2, 2, 2, 64, 4, 2]
+result_shape is ========== [2, 2, 2, 2, 2, 2, 2, 128, 4, 2]
+  golden: (2, 2, 2, 2, 2, 2, 2, 64, 128) torch.bfloat16  [-1224.00, 1160.00]
+  -> PASS  (expect_fail: NPU 按预期拒绝 ->         Solution: Check whether the shape dimension of input/output tensor is correct.)
+
+============================================================
+  4layer_fp8_nd  M=64 N=128 K=256  x=fp8_e4m3fn out=float16  batch_x1=2x2x2x2 batch_x2=2x2x2x2
+  golden: (2, 2, 2, 2, 64, 128) torch.float16  [-17744.00, 18224.00]
+  npu:    (2, 2, 2, 2, 64, 128) torch.float32  [nan, nan]
+  -> FAIL  diff=18224.000000  cos=1.000000  fail_batches=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+
+============================================================
+  5layer_fp8_nd  M=64 N=128 K=256  x=fp8_e4m3fn out=float16  batch_x1=2x2x2x2x2 batch_x2=2x2x2x2x2
+  golden: (2, 2, 2, 2, 2, 64, 128) torch.float16  [-15336.00, 17616.00]
+  -> PASS  (expect_fail: NPU 按预期拒绝 ->         Solution: Check whether the shape dimension of input/output tensor is correct.)
+
+============================================================
+  4layer_fp8_nd_tx2  M=64 N=128 K=256  x=fp8_e4m3fn out=float16  batch_x1=2x2x2x2 batch_x2=2x2x2x2
+  golden: (2, 2, 2, 2, 64, 128) torch.float16  [-16352.00, 16768.00]
+  npu:    (2, 2, 2, 2, 64, 128) torch.float32  [nan, nan]
+  -> FAIL  diff=16768.000000  cos=1.000000  fail_batches=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+
+============================================================
+  5layer_fp8_nd_tx2  M=64 N=128 K=256  x=fp8_e4m3fn out=float16  batch_x1=2x2x2x2x2 batch_x2=2x2x2x2x2
+  golden: (2, 2, 2, 2, 2, 64, 128) torch.float16  [-14776.00, 17536.00]
+  -> PASS  (expect_fail: NPU 按预期拒绝 ->         Solution: Check whether the shape dimension of input/output tensor is correct.)
+
+============================================================
+  4layer_fp8_nz  M=64 N=128 K=256  x=fp8_e4m3fn out=float16  batch_x1=2x2x2x2 batch_x2=2x2x2x2
+  golden: (2, 2, 2, 2, 64, 128) torch.float16  [-13528.00, 18576.00]
+  npu:    (2, 2, 2, 2, 64, 128) torch.float32  [0.00, 0.00]
+  -> FAIL  diff=18576.000000  cos=1.000000  fail_batches=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+
+============================================================
+  5layer_fp8_nz  M=64 N=128 K=256  x=fp8_e4m3fn out=float16  batch_x1=2x2x2x2x2 batch_x2=2x2x2x2x2
+  golden: (2, 2, 2, 2, 2, 64, 128) torch.float16  [-16800.00, 19104.00]
+  -> PASS  (expect_fail: NPU 按预期拒绝 ->         Parameter srcTensor of aclnnNpuFormatCast has incorrect shape dim 7. Reason: The ViewShape dim of srcTensor must be between 2 and 6 when additionalDtype equals the dtype of srcTensor and additionalDtype is int8.)
+
+============================================================
+  4layer_fp8_nz_tx2  M=64 N=128 K=256  x=fp8_e4m3fn out=float16  batch_x1=2x2x2x2 batch_x2=2x2x2x2
+  golden: (2, 2, 2, 2, 64, 128) torch.float16  [-12992.00, 17360.00]
+  npu:    (2, 2, 2, 2, 64, 128) torch.float32  [0.00, 0.00]
+  -> FAIL  diff=17360.000000  cos=1.000000  fail_batches=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+
+============================================================
+  5layer_fp8_nz_tx2  M=64 N=128 K=256  x=fp8_e4m3fn out=float16  batch_x1=2x2x2x2x2 batch_x2=2x2x2x2x2
+  golden: (2, 2, 2, 2, 2, 64, 128) torch.float16  [-15096.00, 23008.00]
+  -> PASS  (expect_fail: NPU 按预期拒绝 ->         Parameter srcTensor of aclnnNpuFormatCast has incorrect shape dim 7. Reason: The ViewShape dim of srcTensor must be between 2 and 6 when additionalDtype equals the dtype of srcTensor and additionalDtype is int8.)
+
+============================================================
+  4layer_fp4_nd  M=64 N=128 K=256  x=fp4_e2m1 out=bfloat16  batch_x1=2x2x2x2 batch_x2=2x2x2x2
+均值=0.05, 方差=4
+result_shape is ========== [2, 2, 2, 2, 64, 4, 2]
+result_shape is ========== [2, 2, 2, 2, 128, 4, 2]
+  golden: (2, 2, 2, 2, 64, 128) torch.bfloat16  [-1072.00, 1040.00]
+  npu:    (2, 2, 2, 2, 64, 128) torch.float32  [nan, nan]
+  -> FAIL  diff=6645570.000000  cos=-0.013681  fail_batches=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+
+============================================================
+  5layer_fp4_nd  M=64 N=128 K=256  x=fp4_e2m1 out=bfloat16  batch_x1=2x2x2x2x2 batch_x2=2x2x2x2x2
+均值=0.05, 方差=4
+result_shape is ========== [2, 2, 2, 2, 2, 64, 4, 2]
+result_shape is ========== [2, 2, 2, 2, 2, 128, 4, 2]
+  golden: (2, 2, 2, 2, 2, 64, 128) torch.bfloat16  [-1192.00, 1096.00]
+  -> PASS  (expect_fail: NPU 按预期拒绝 -> [ERROR] 2026-07-02-22:10:32 (PID:774, Device:5, RankID:-1) ERR01001 OPS invalid parameter)
+
+============================================================
+  4layer_fp4_nd_tx2  M=64 N=128 K=256  x=fp4_e2m1 out=bfloat16  batch_x1=2x2x2x2 batch_x2=2x2x2x2
+均值=0.05, 方差=4
+result_shape is ========== [2, 2, 2, 2, 64, 4, 2]
+result_shape is ========== [2, 2, 2, 2, 128, 4, 2]
+  golden: (2, 2, 2, 2, 64, 128) torch.bfloat16  [-1104.00, 1096.00]
+  npu:    (2, 2, 2, 2, 64, 128) torch.float32  [nan, nan]
+  -> FAIL  diff=6645712.000000  cos=-0.011451  fail_batches=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+
+============================================================
+  5layer_fp4_nd_tx2  M=64 N=128 K=256  x=fp4_e2m1 out=bfloat16  batch_x1=2x2x2x2x2 batch_x2=2x2x2x2x2
+均值=0.05, 方差=4
+result_shape is ========== [2, 2, 2, 2, 2, 64, 4, 2]
+result_shape is ========== [2, 2, 2, 2, 2, 128, 4, 2]
+  golden: (2, 2, 2, 2, 2, 64, 128) torch.bfloat16  [-1128.00, 1200.00]
+  -> PASS  (expect_fail: NPU 按预期拒绝 -> [ERROR] 2026-07-02-22:10:33 (PID:774, Device:5, RankID:-1) ERR01001 OPS invalid parameter)
+
+============================================================
+  4layer_fp4_nz  M=64 N=128 K=256  x=fp4_e2m1 out=bfloat16  batch_x1=2x2x2x2 batch_x2=2x2x2x2
+均值=0.05, 方差=4
+result_shape is ========== [2, 2, 2, 2, 64, 4, 2]
+result_shape is ========== [2, 2, 2, 2, 128, 4, 2]
+  golden: (2, 2, 2, 2, 64, 128) torch.bfloat16  [-1120.00, 1024.00]
+  npu:    (2, 2, 2, 2, 64, 128) torch.float32  [nan, nan]
+  -> FAIL  diff=6645604.000000  cos=-0.007486  fail_batches=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+
+============================================================
+  5layer_fp4_nz  M=64 N=128 K=256  x=fp4_e2m1 out=bfloat16  batch_x1=2x2x2x2x2 batch_x2=2x2x2x2x2
+均值=0.05, 方差=4
+result_shape is ========== [2, 2, 2, 2, 2, 64, 4, 2]
+result_shape is ========== [2, 2, 2, 2, 2, 128, 4, 2]
+  golden: (2, 2, 2, 2, 2, 64, 128) torch.bfloat16  [-1160.00, 1128.00]
+  -> PASS  (expect_fail: NPU 按预期拒绝 ->         Parameter srcTensor of aclnnNpuFormatCast has incorrect shape dim 7. Reason: The ViewShape dim of srcTensor must be between 2 and 6 when additionalDtype equals the dtype of srcTensor and additionalDtype is int8.)
+
+============================================================
+  1b_fp8_x1only  M=64 N=128 K=256  x=fp8_e4m3fn out=float16  batch_x1=2x2x2 batch_x2=
+  golden: (2, 2, 2, 64, 128) torch.float16  [-12552.00, 15432.00]
+  npu:    (2, 2, 2, 64, 128) torch.float32  [nan, nan]
+  -> FAIL  diff=0.000000  cos=1.000000  fail_batches=[0, 1, 2, 3, 4, 5, 6, 7]
+
+============================================================
+  1b_fp8_x1only_tx2  M=64 N=128 K=256  x=fp8_e4m3fn out=float16  batch_x1=2x2x2x2 batch_x2=
+  golden: (2, 2, 2, 2, 64, 128) torch.float16  [-16168.00, 15264.00]
+  npu:    (2, 2, 2, 2, 64, 128) torch.float32  [nan, nan]
+  -> FAIL  diff=6659588.000000  cos=-0.086269  fail_batches=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+
+============================================================
+  1b_fp4_x1only  M=64 N=128 K=256  x=fp4_e2m1 out=bfloat16  batch_x1=2x2x2x2 batch_x2=
+均值=0.05, 方差=4
+result_shape is ========== [2, 2, 2, 2, 64, 4, 2]
+result_shape is ========== [128, 4, 2]
+  golden: (2, 2, 2, 2, 64, 128) torch.bfloat16  [-1080.00, 1096.00]
+  npu:    (2, 2, 2, 2, 64, 128) torch.float32  [nan, nan]
+  -> FAIL  diff=6645562.000000  cos=0.005833  fail_batches=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+
+============================================================
+  1b_fp4_x1only_tx2  M=64 N=128 K=256  x=fp4_e2m1 out=bfloat16  batch_x1=2x2 batch_x2=
+均值=0.05, 方差=4
+result_shape is ========== [2, 2, 64, 4, 2]
+result_shape is ========== [128, 4, 2]
+  golden: (2, 2, 64, 128) torch.bfloat16  [-984.00, 980.00]
+  npu:    (2, 2, 64, 128) torch.float32  [nan, nan]
+  -> FAIL  diff=6645376.000000  cos=0.003384  fail_batches=[0, 1, 2, 3]
+
+============================================================
+name             golden    npu result   max_diff   cosine  fail_batches
+------------------------------------------------------------------------
+1b_fp8_basic         OK     OK   PASS   0.000000 1.000000  
+1b_fp8_bias          OK     OK   PASS   0.003906 1.000000  
+1b_fp8_bf16          OK     OK   PASS   0.000000 0.999997  
+1b_fp8_fp32          OK     OK   PASS   0.000000 1.000000  
+1b_fp8_oddK          OK     OK   PASS   0.000000 1.000000  
+1b_fp8_B8            OK     OK   PASS   0.000000 1.000000  
+2b_fp8_basic         OK     OK   PASS   0.000000 1.000000  
+2b_fp8_bias          OK     OK   PASS   0.003906 0.999998  
+3b_fp8_basic         OK     OK   PASS   0.000000 1.000000  
+4b_fp8_basic         OK     OK   PASS   0.000000 1.000000  
+1b_fp8_M1            OK     OK   PASS   0.000000 1.000000  
+1b_fp8_N1            OK     OK   PASS   0.000000 1.000000  
+bcast_B_fp8          OK     OK   PASS   0.000000 1.000000  
+bcast_A_fp8          OK     OK   PASS   0.000000 1.000000  
+3b_fp4_chk5          OK     OK   PASS   0.000000 0.999990  
+1b_fp4_basic         OK     OK   PASS   0.000000 0.999990  
+2b_fp4_basic         OK     OK   PASS   0.000000 0.999989  
+1b_fp4_bias          OK     OK   PASS   0.003906 0.999994  
+1b_fp4_oddK          OK     OK   PASS   0.000000 0.999996  
+1b_fp8_tx2           OK     OK   PASS   0.000000 1.000000  
+1b_fp8_tx1           OK     OK   PASS   0.000000 1.000000  
+1b_fp8_tx1x2         OK     OK   PASS   0.000000 1.000000  
+2b_fp8_tx1x2         OK     OK   PASS   0.000000 0.999998  
+1b_fp4_nN2           OK     OK   PASS   0.000000 1.000000  
+1b_fp4_nN1           OK     OK   PASS   0.000000 1.000000  
+1b_fp4_oddInner_fail     OK     OK   PASS         --       --  
+nobatch_fp8          OK     OK   PASS   0.000000 1.000000  
+nobatch_fp8_tx2      OK     OK   PASS   0.000000 1.000002  
+nobatch_fp4          OK     OK   PASS   0.000000 0.999993  
+1b_fp8_basic_nz      OK    ERR     --         --       --  
+2b_fp8_basic_nz      OK     OK   FAIL 16861.500000 0.035331  [0, 1, 2, 3, 4, 5]
+3b_fp8_basic_nz      OK     OK   FAIL 18448.000000 0.035450  [0, 1, 2, 3, 4, 5, 6, 7]
+1b_fp4_basic_nz      OK     OK   FAIL 6645545.000000 -0.011444  [0, 1]
+3b_fp4_chk5_nz       OK     OK   FAIL 6645428.000000 -0.009348  [0, 1, 2]
+1b_fp8_tx1_nz        OK     OK   FAIL 6649752.000000 -0.064341  [0, 1]
+1b_fp8_tx2_nz        OK     OK   FAIL 6649828.000000 -0.052036  [0, 1]
+1b_fp8_tx1x2_nz      OK     OK   FAIL 6650956.000000 -0.070790  [0, 1]
+bcast_B_fp8_nz       OK     OK   FAIL 6652832.000000 -0.095420  [0, 1, 2]
+bcast_A_fp8_nz       OK     OK   FAIL 6651892.000000 -0.077688  [0, 1, 2]
+2b_fp4_basic_nz      OK     OK   FAIL 6645512.000000 -0.007996  [0, 1, 2, 3, 4, 5]
+1b_fp4_bias_nz       OK     OK   FAIL   0.000000 1.000000  [0, 1]
+big_fp8              OK     OK   FAIL 42976.000000 1.000000  [0, 1]
+big_fp4              OK     OK   FAIL 6646140.000000 -0.000105  [0, 1]
+big_fp8_nz           OK     OK   FAIL 6658004.000000 -0.089703  [0, 1]
+K64_fp8              OK     OK   FAIL 6647340.000000 -0.052809  [0, 1]
+K128_fp8             OK     OK   FAIL 6647794.000000 -0.056004  [0, 1]
+K64_fp4              OK     OK   FAIL 6645229.000000 0.009821  [0, 1]
+K192_fp8             OK     OK   FAIL 6648752.000000 -0.052739  [0, 1]
+N48_fp8              OK     OK   FAIL 6650420.000000 -0.058239  [0, 1]
+M33_fp8              OK     OK   FAIL 6647964.000000 -0.053426  [0, 1]
+K300_fp4             OK     OK   FAIL 6645405.000000 -0.005214  [0, 1]
+1b_fp4_tx2           OK     OK   FAIL 6645636.000000 -0.014035  [0, 1]
+1b_fp4_tx2_nz        OK     OK   FAIL 6645518.000000 -0.012227  [0, 1]
+2layer_fp4_tx2_nz     OK     OK   FAIL 6645642.000000 -0.011624  [0, 1, 2, 3]
+3layer_fp4_tx2_nz     OK     OK   FAIL 6645824.000000 -0.018695  [0, 1, 2, 3, 4, 5, 6, 7]
+4layer_fp4_tx2_nz     OK     OK   FAIL 6645596.000000 -0.015416  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+5layer_fp4_tx2_nz     OK     OK   PASS         --       --  
+6layer_fp4_tx2_nz     OK     OK   PASS         --       --  
+7layer_fp4_tx2_nz     OK     OK   PASS         --       --  
+4layer_fp8_nd        OK     OK   FAIL 18224.000000 1.000000  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+5layer_fp8_nd        OK     OK   PASS         --       --  
+4layer_fp8_nd_tx2     OK     OK   FAIL 16768.000000 1.000000  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+5layer_fp8_nd_tx2     OK     OK   PASS         --       --  
+4layer_fp8_nz        OK     OK   FAIL 18576.000000 1.000000  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+5layer_fp8_nz        OK     OK   PASS         --       --  
+4layer_fp8_nz_tx2     OK     OK   FAIL 17360.000000 1.000000  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+5layer_fp8_nz_tx2     OK     OK   PASS         --       --  
+4layer_fp4_nd        OK     OK   FAIL 6645570.000000 -0.013681  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+5layer_fp4_nd        OK     OK   PASS         --       --  
+4layer_fp4_nd_tx2     OK     OK   FAIL 6645712.000000 -0.011451  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+5layer_fp4_nd_tx2     OK     OK   PASS         --       --  
+4layer_fp4_nz        OK     OK   FAIL 6645604.000000 -0.007486  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+5layer_fp4_nz        OK     OK   PASS         --       --  
+1b_fp8_x1only        OK     OK   FAIL   0.000000 1.000000  [0, 1, 2, 3, 4, 5, 6, 7]
+1b_fp8_x1only_tx2     OK     OK   FAIL 6659588.000000 -0.086269  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+1b_fp4_x1only        OK     OK   FAIL 6645562.000000 0.005833  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+1b_fp4_x1only_tx2     OK     OK   FAIL 6645376.000000 0.003384  [0, 1, 2, 3]
+
+[exit] FAIL: 至少一个用例数值不匹配
