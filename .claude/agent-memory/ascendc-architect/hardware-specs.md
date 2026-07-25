@@ -1,66 +1,29 @@
 ---
 name: hardware-specs
-description: A2A3 (910B) 和 A5 (950) 芯片硬件规格速查 — AI Core/UB/L0/L1/L2/HBM 容量、Cube/Vector 核数、Fixpipe/Sparsity 支持
+description: 硬件规格指向 ini + 对 Tiling/Kernel 设计影响归纳（原始数字真值在 AscendC_platform/*.ini 与 ascendc-hardware skill）
 metadata:
   type: reference
 ---
 
-# 芯片硬件规格速查
+# 硬件规格 — 指向 ini + 设计影响
 
-## A2A3 (Ascend 910B/910C)
+> **原始数字真值 = `AscendC_platform/*.ini`**。本 memory 不维护规格表（旧表曾漂移：A5 核数 36/32/28 不一致）。规格索引与字段解释见 skill `ascendc-hardware`。
 
-| 规格项 | 参数 |
-|--------|------|
-| AI Core 总数 | 24 |
-| HBM 容量 | 64 GB |
-| L2 容量 | 192 MB |
-| Cube 核数量 | 24 |
-| AIC 版本 | AIC-C-220 / dav-c220-cube |
-| L1 大小 | — |
-| L0A 大小 | 64 KB |
-| L0B 大小 | 64 KB |
-| L0C 大小 | 128 KB |
-| Bias 大小 | 1 KB |
-| Vector 核数量 | 48 |
-| CCEC_AIV 版本 | dav-c220-vec |
-| UB 大小 | 192 KB |
-| Fixpipe 支持 | 是 |
-| Sparsity 支持 | 是 |
+## 查规格的正确路径
+1. 确认目标 SoC / variant（如 950DT_9575 vs 950PR）
+2. 读对应 `AscendC_platform/Ascend*.ini` 的 `[AICoreSpec]`
+3. 字段含义与设计影响见 `ascendc-hardware` skill
 
-## A5 (Ascend 950)
+## 对 Tiling/Kernel 设计的影响归纳（跨代稳定，非漂移数字）
 
-| 规格项 | 参数 |
-|--------|------|
-| AI Core 总数 | 36 |
-| HBM 容量 | 128 GB |
-| L2 容量 | 128 MB |
-| Cube 核数量 | 36 |
-| L1 大小 | 512 KB |
-| L0A 大小 | 64 KB |
-| L0B 大小 | 64 KB |
-| L0C 大小 | 256 KB |
-| Bias 大小 | 4 KB |
-| Vector 核数量 | 72 |
-| UB 大小 | 248 KB |
-| Fixpipe 支持 | 否 |
-| Sparsity 支持 | 否 |
+- **L0C**：决定 tile 累加块上限（A2A3 128KB / A5 256KB）
+- **UB**：决定双/三缓冲 tile 门限（A2A3 192KB / A5 ~248KB）
+- **L1**：A2A3 无 / A5 512KB，A5 可做更多片上复用
+- **Cube:Vector = 1:2**：每 AI Core 1 Cube + 2 Vector
+- **同地址并行**：A2A3 不支持（分核需错位规避）/ A5 支持（可简化）
+- **Fixpipe/Sparsity**：A2A3 支持 / A5 通路不同（见 ini fb0_size + intrinsic）
+- **核数**：因 variant 而异，**一律以 ini 为准**（勿写死）
 
-## 关键差异速记
-
-- **A5 核数 +50%** (24→36 Cube, 48→72 Vector)
-- **A5 L0C 翻倍** (128→256KB) → tile 粒度可放大
-- **A5 UB 扩大** (192→248KB, +29%) → 双缓冲阈值上调
-- **A5 L2 缩小** (192→128MB, -33%) → 需更注意 L2 复用
-- **A5 无 Fixpipe** → 软件流水替代，CrossCoreSetFlag/WaitFlag
-- **A5 无 Sparsity** → 走 Dense 计算路径
-- **A2A3 需错位分核** 避免同地址冲突，**A5 硬件支持同地址并行**
-- **A5 有 L1** (512KB)，A2A3 无 L1
-
-## 对 Tiling 的影响
-
-| 设计决策 | A2A3 | A5 |
-|----------|------|-----|
-| 单 tile 最大字节 (受限于 L0C) | 128KB | 256KB |
-| 双缓冲 tile 门限 (受限于 UB) | tile ≤ 96KB | tile ≤ 124KB |
-| Cube:Vector 配比 | 1:2 (24:48) | 1:2 (36:72) |
-| 分核策略 | 错位/对角线 | 规则滑动/顺序/对称/TND |
+## 相关
+- skill `ascendc-hardware`（SKILL.md + a2a3/a5 索引）
+- kernel-optimization `common/general-techniques.md`（同地址冲突、双缓冲等）

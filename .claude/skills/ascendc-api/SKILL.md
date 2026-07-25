@@ -7,6 +7,16 @@ description: 查询 AscendC 算子开发的 API 用法、函数原型、参数�
 
 本 skill 收录 AscendC Kernel 开发中最常用 API 的函数原型、参数结构体、关键约束和 A2A3/A5 差异。写 Kernel、查 API 调用方式或排查 API 用法问题时，按下表选对应明细文档阅读。
 
+## 源策略
+
+| 需求 | 去 |
+|---|---|
+| 函数签名/模板/参数 | **ops-tensor 头文件**（权威）：`ops-tensor/include/tensor_api/`、`ops-tensor/include/blaze/` |
+| 用法/约束/示例 | 官网按需查：见 `CC4Ascend/refs/hiascend-api/INDEX.md`（分类树 + URL 规律） |
+| 本 skill 明细 | 下表 |
+
+> C++ 签名以头文件为准（比官网 doc 更准）。官网补充用法约束。
+
 ## 明细文档
 
 ### 基础数据结构
@@ -14,6 +24,7 @@ description: 查询 AscendC 算子开发的 API 用法、函数原型、参数�
 
 ### 基础 API
 - [DataCopy 与 DataCopyPad](DataCopy与DataCopyPad.md) — GM↔Local 数据搬运、DataCopyParams 结构体、32B 对齐约束、非对齐 Pad 搬运、A5 ND→NZ 随路转换与 L1→GM 通路删除。
+- [Cast 与类型转换](Cast与类型转换.md) — Cast 签名（Membase/Regbase 两形态）、RoundMode 枚举、SatMode 饱和语义（量化必查）、Vector 计算 Add/Muls/Adds/Maxs/Mins、量化 dequant-requant 骨架、ReinterpretCast。
 - [Fixpipe](Fixpipe.md) — L0C 结果搬出到 L1/UB/GM，随路量化/ReLU/类型转换，FixpipeParamsV220(A2A3) vs FixpipeParamsC310(A5) 与数据通路差异。
 - [SetFlag 与 WaitFlag 同步](SetFlag与WaitFlag同步.md) — 同核内流水线同步、HardEvent 事件类型表、三阶段流水模式、A5 CrossCoreSetFlag/CrossCoreWaitFlag 跨核同步与死锁规避。
 

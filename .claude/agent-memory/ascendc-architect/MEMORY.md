@@ -8,19 +8,19 @@ AscendC 算子架构专家记忆。扁平文件模型：分类靠文件名前缀
 - [scale 转置 stride 判定](scale-transpose-stride-semantics.md) — 约束A：NPU 靠 stride(非 shape)判转置；scale 用 .transpose(-3,-2) 跳过末维"2"；checker @ QuantMatmulKernelNpuOpApi.cpp
 - [Blaze/CMCT 编译期选路](cann-blaze-cmct-gating.md) — IS_BLAZE=(MAJOR>=9&&MINOR>0) 编译期定路径(9.0=CMCT/9.1=Blaze)；dav_c220/c310 芯片映射不可自选；9.0.x fp4 需 fp4x2 白名单；MX 仅 950
 - [device PRINTF 验证边界](device-print-verification.md) — 只能证实"执行到了"、不能证伪"没执行"；真实证据靠数值(multi-batch PASS)
-- [可证伪 golden 测试设计](golden-falsifiable-testing.md) — 全码覆盖+bf16双门限+精确累加+阴性对照；max_diff=0 证 HW LUT≡OCP；弱/强证据界定
-- [cos+相对L2 判据](golden-cos-rell2-criterion.md) — 现行判据(取代官方 BenchmarkCompareStandard 与 peak-scaling)：cos为主(0.9999)+相对L2辅助门(2^-mantissa逐dtype)；阈值推导；相对L2堵cos乘性偏置盲区；证伪电池；C3绝对偏置探针量级相关坑
+- [可证伪 golden 测试设计](golden-falsifiable-testing.md) — 全码覆盖+阴性对照；机制见 skill `ascendc-golden-testing` §falsifiable-design
+- [cos+相对L2 判据](golden-cos-rell2-criterion.md) — 现行 gating 已改为 flat isclose+err_ratio（见 skill `ascendc-golden-testing` §criteria）；本条留 cos/rel_l2 诊断价值与历史判据演变
 - [抵消场景判据修法](golden-cancellation-criterion.md) — (已被cos判据取代,存病态诊断价值)极端K+对称抵消误杀零误差核；噪声地板检测+peak缩放；证伪电池 A-F
 - [fp4+bias 近零 err_small 判别](golden-fp4-bias-nearzero.md) — 1b_fp4_bias 偶发FAIL根因;fp4 matmul是fp32精确(dyadic)非换序噪声;近零靠bias抵消;正确核也因L0C bias-first累加序~1.7%擦门(|err|~1e-5) vs bias降精bug(|err|~1e-3);max_diff=1.99是大值无害;判据本身不误杀正确核
 - [仓库 mxfp4 测试不可参照](repo-mxfp4-tests-broken.md) — 仓库无真实 e2m1 解码；op-plugin 4 个 mxfp4 测试 NameError 从未跑、数据未打包，不可作 fp4 调用参照
 
 ## 通用知识：硬件 / 调优
-- [硬件规格速查](hardware-specs.md) — A2A3(910B/910C) vs A5(950) AI Core/UB/L0/L1/L2/HBM 容量、核数、Fixpipe/Sparsity 对比与对 Tiling 影响
+- [硬件规格速查](hardware-specs.md) — 已降级为指针：原始数字真值在 `AscendC_platform/*.ini` + skill `ascendc-hardware`；本条只留跨代 Tiling 影响归纳（旧表核数曾漂移 36/32/28）
 - [核间同步](expert-cross-core-sync.md) — A5 CrossCoreSetFlag/WaitFlag 死锁排查三步法、mode=3
 - [性能调优](expert-performance-tuning.md) — A5 性能不升反降排查清单(错位分核负优化/CCU/Tiling 沿用/ND DMA)+通用流程
 - [Cube-Vector 融合](expert-cv-fusion.md) — L0C2UB/UB2L1 直连消除 GM 往返、切 K 累加、后处理融合管线、同步时序
 - [Tiling 策略](expert-tiling-patterns.md) — TilingKey 新旧系统、双/三缓冲判定、分核策略、量化 scale 的 UB 预算、A5 MX 量化
-- [常见陷阱](expert-common-pitfalls.md) — 类型推导、A5 迁移被删接口、arch 命名约定、aclnn 两段式调用
+- [常见陷阱](expert-common-pitfalls.md) — 类型推导/A5 删接口/arch 命名/aclnn 两段式；编译/安装陷阱机制见 skill `ascendc-build-errors`，语义陷阱见 `ascendc-data-context`
 
 ## 通用知识：A2A3 (910B/910C)
 - [分核策略](a2a3-core-split.md) — GMM 对角线分核、Attention S1/S2/B 多维分核、QuantGMM 2D Split
@@ -47,7 +47,9 @@ AscendC 算子架构专家记忆。扁平文件模型：分类靠文件名前缀
 - [设计文档保持纯净](feedback-design-doc-pristine.md) — 实施方案.md 当纯设计文档；施工进度另起单独文档
 
 ## 项目与环境
+- [omni AiInfraMatmul 迁移](omni-aiinframatmul-migration.md) — =ops-nn mat_mul_v3 改名;fp32+NZ 全错根因(GetMatMulOp 丢 NdNzNd ReFormat)、IS_ND_NZ_FP32 dispatch、isNzB 误导、残留风险
 - [QBMM-Batch 项目档案](qbmm-batch-status.md) — quantBatchMatmulV3 MX scale 加 batch 维(A5/950)；已上板验证完成(Blaze+CMCT)；指向其产出的通用知识
 - [QBMM MX batchA合轴守卫](qbmm-mx-batchA-mfusion-guard.md) — scale-batch提交误删CheckFusionBatchA的IsMicroScaling禁合轴守卫→A_batch-B_no_batch合M走WITHOUT_BATCH kernel→TilingKey 8196应变10500;含arch35 TilingKey位域解码
 - [工作区布局](workspace-layout.md) — ops-nn/ops-tensor/op-plugin/ops-transformer 兄弟仓角色、skills/、agent-memory、算子分类、芯片支持
 - [设计规范来源](spec-sources.md) — skills/、ops-transformer docs/zh、在线 AscendC API 指针
+- [MM-fp32nz-aclgraph 项目范围](mm-fp32nz-aclgraph-project-scope.md) — 阶段1只验 nn 仓 torch.matmul fp32+NZ 在 ACLGraph 真实行为(不动 omni fix);无NPU无nn源码,板上出真值

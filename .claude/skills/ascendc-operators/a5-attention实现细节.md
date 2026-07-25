@@ -1,46 +1,30 @@
-# A5 Attention 实现细节
+# A5 Attention 实现细节索引
 
-## 架构特征
+真实源：`ops-transformer_AI/attention/*/op_kernel/arch35/` + `attention/common/op_kernel/arch35/`。
 
-- **模块化**：kernel/service/matmul_modules/vector_api/vf 子目录
-- **Regbase 入口**：`*_entry_regbase.h` 替代传统模板核函数
-- **MX FullQuant 支持**：`*_mx_fullquant.h` 文件名
-- **_apt.cpp 后缀**：Ascend Parallel Template
+## A5 (arch35) 结构特征（已验证）
 
-## 5 个原生双架构算子（arch35 存在）
+- **模块化子目录**：`kernel/` / `service/` / `matmul_modules/` / `vector_api/` / `vf/`
+- **Regbase 入口**：`*_entry_regbase.h` 文件名模式
+- **MX FullQuant**：`*_mx_fullquant.h` 文件名模式
+- **`_apt.cpp` 后缀**：Ascend Parallel Template（A5 专属）
+- **共享设施**：`attention/common/op_kernel/arch35/`（50+ 文件，全量化/非量化变体）
 
-| 算子 | arch35 文件数 | 关键特征 |
-|------|:---:|------|
-| `flash_attention_score` | 5 | `_entry_regbase.h`, `_kernel_train.h` |
-| `flash_attention_score_grad` | — | 训练反向 |
-| `incre_flash_attention` | ~10+ | 9种量化模式，PA支持 |
-| `block_sparse_attention` | — | `_kernel_arch35_regular.h` |
-| `common` | 50+ | 共享全部量化/非量化变体 |
+## 原生双架构算子（arch22 + arch35 共存）
 
-## A5 专属算子（仅有 arch35，无 arch22）
+`flash_attention_score` / `flash_attention_score_grad` / `fused_infer_attention_score` / `incre_flash_attention` / `lightning_indexer` / `mla_prolog` 等（详见 [attention索引](attention通用范式.md) arch 分布表）
 
-| 算子 | 说明 |
-|------|------|
-| `attention_update` | A5 才有的更新算子 |
-| `dense_lightning_indexer_softmax_lse` | A5 新增稠密索引 |
-| `flash_attn` | A5 专用 FlashAttention |
-| `fused_causal_conv1d` | A5 才支持 |
-| `gather_pa_kv_cache` | A5 PagedAttention KV 收集 |
+## A5 专属算子（有 arch35，抽样未见 arch22）
 
-## Regbase 入口模式
+`attention_update` / `flash_attn` / `fused_causal_conv1d` / `nsa_*` 系列 / `rain_fusion_attention` / `recurrent_gated_delta_rule` / `ring_attention_update`
 
-```cpp
-// arch35/flash_attention_score_entry_regbase.h
-// 使用 RegTensor + MicroAPI 替代传统 TPipe/TQue
-// 寄存器直接操作，无需显式 buffer 管理
-```
+> 注意：无 arch22 子目录不等于不支持 A2A3，可能平铺在 op_kernel/。逐算子确认。
 
-## 量化增强
+## 量化增强（A5 vs A2A3）
 
-A5 相比 A2A3 新增：
-- **MX FullQuant**（Microscaling 全量化）
-- **FP8/HiFLOAT8 数据通路**
-- 更多 AntiQuant 变体组合
+- MX FullQuant（Microscaling 全量化）
+- FP8 / HiFLOAT8 数据通路
+- 更多 AntiQuant 变体
 
 ## 来源
-- Agent 分析 `attention/*/op_kernel/arch35/` 全部目录
+- `ops-transformer_AI/attention/*/op_kernel/arch35/`（find + ls 验证）

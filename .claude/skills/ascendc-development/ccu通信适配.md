@@ -1,5 +1,7 @@
 # CCU 通信适配（A5 专属）
 
+> **速查摘录**：本文是从 `cross_platform_migration_guide.md` §集合通信 + §核间同步 抽取的快速查阅版。权威以迁移指南为准；MatmulAllReduce 完整 Eager/Graph 适配代码见同指南。
+
 ## 概述
 
 Ascend 950 引入 **CCU1.0**（集合通信加速器），替代 A2A3 的 AICPU 通信方式，降低访存需求，减少调度时延。

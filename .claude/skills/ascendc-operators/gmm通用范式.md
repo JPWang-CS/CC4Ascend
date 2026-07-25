@@ -1,137 +1,67 @@
-# GMM（分组矩阵乘）类算子通用范式
+# GMM（分组矩阵乘）类算子范式
 
-## 算子列表（11 个全面分析）
+真实源：`ops-transformer_AI/gmm/`。共 **7 个算子**。范式内容已对照真实代码验证。
 
-| 算子 | 量化 | A5 (arch35) | A2A3 | 分核策略 |
-|------|:---:|:---:|:---:|------|
-| `grouped_matmul` | a16w8 quant | ✓ | ✓ | A2A3 对角线 / A5 ASWT |
-| `grouped_matmul_add` | — | ✓ | ✓ | 对角线 + Atomic Add |
-| `grouped_matmul_finalize_routing` | A8W8/A8W4 | ✓ | ✓ | 对角线分组 + token routing |
-| `grouped_matmul_swiglu_quant` | A8W8/A8W4 MSD | — | ✓ | 3-stage pipeline + workspace-split |
-| `grouped_matmul_swiglu_quant_v2` | A8W4/A4W4 | ✓ | — | A5 MSD / fusion path |
-| `quant_grouped_matmul_dequant` | 量化+反量化 | — | ✓ | 2D M/N split + GEMV threshold |
-| `quant_grouped_matmul_inplace_add` | 量化+inplace | ✓ | — | cgmct ASWT 对角线分组 |
+## 算子清单
 
-## 分核策略详解
+| 算子 | 说明 |
+|---|---|
+| `grouped_matmul` | 基础，A2A3 平铺 + A5 arch35 |
+| `grouped_matmul_add` | + Atomic Add |
+| `grouped_matmul_finalize_routing` | + token routing |
+| `grouped_matmul_swiglu_quant` | + SwiGLU + 量化（A8W8/A8W4 MSD） |
+| `grouped_matmul_swiglu_quant_v2` | V2（A4W4 / fusion path） |
+| `quant_grouped_matmul_dequant` | 量化+反量化，2D M/N split |
+| `quant_grouped_matmul_inplace_add` | 量化+inplace |
 
-### 对角线分核（A2A3）
+## 代码组织（GMM 特有，非 arch22/arch35 二分）
 
-核心实现：`MNBlockIdxCompute(mnConfig, block, count, thresholdM_dimN)`
+GMM **同时有 A2A3 和 A5**，但用三层结构（已验证）：
 
 ```
-if blockDimM <= thresholdDimM (通常 5):
-    简单行优先：mIdx = block / blockDimN, nIdx = block % blockDimN
-else:
-    窗口对角线分核：
-    - 对角线窗口大小 = thresholdDimM × blockDimN
-    - 按对角线逐窗口分配 block
+grouped_matmul/op_kernel/
+├── arch35/                                  # A5（non_quant / quant_adaptive_sliding_window / weight_quant_basic_block）
+├── a16w4_msd/                               # A2A3 A16W4 MSD
+├── gmm_infra/                               # 共享模板基础设施（CUTLASS 式）
+│   ├── arch/gmm_arch.hpp                    # 架构抽象层
+│   ├── gemm/ epilogue/ layout/ detail/
+├── grouped_matmul.cpp/.h                    # A2A3 主入口
+├── grouped_matmul_apt.cpp                   # A5 入口（apt 后缀）
+├── grouped_matmul_antiquant_a8w4.h          # A2A3 平铺量化变体（含 _msd/_pre/_nz）
+├── grouped_matmul_a4w4.h / _regular.h       # A2A3 A4W4
+└── grouped_matmul_tiling_key.h
 ```
 
-关键参数：
-- `thresholdBlockNum = 8`（grouped_matmul_add）
-- `thresholdDimM = 5`
-- 目的：避免相邻核访问相同 GM 地址（A2A3 不支持同地址并行）
+> ⚠️ 判断 A2A3/A5 不能只看 arch22 子目录。GMM 的 A2A3 是平铺 + `a16w4_msd/` + `gmm_infra/arch/` 抽象。
 
-### ASWT 对角线分组（A5 cgmct）
+## 分核策略（已验证 grep）
 
-`GroupedMatmulAswtWithTailSplitScheduler`：
-- 按 group 边界进行对角线分组
-- 窗口内 M/N 块使用 BlockMmad 模块化调度
-- 尾块 TailSplit 特殊处理
-- 无需手动计算 MNBlockIdx → M/N 映射
+### A2A3 对角线分核
+核心：`MNBlockIdxCompute(mnConfig, block, count, thresholdDimM)`
+- `thresholdDimM = 5`（已验证）、`thresholdBlockNum = 8`（已验证）
+- blockDimM ≤ thresholdDimM → 简单行优先；否则 → 窗口对角线
+- 目的：规避 A2A3 同地址访问冲突
 
-### QuantGMM 2D M/N Split
+### A5 ASWT 对角线分组
+`GroupedMatmulAswtWithTailSplitScheduler`：按 group 边界对角线分组 + 尾块 TailSplit。A5 支持同地址并行，无需错位规避。
 
-`quant_grouped_matmul_dequant` 运行时计算最优 2D split：
-```cpp
-l0CMNFractal = 256;  // 从 L0C 容量
-oriBaseMN = floor(sqrt(l0CMNFractal));
-// Try 0..3，选 MTE2 流量最小的配置
-for (int32_t i=1; i<4; i++) {
-    int32_t mte2Now = (fracN << (3-i)) + (fracM << i);
-    if (mte2Now < mte2Min) { chosen = i; }
-}
-MCoreNum = 1 << (3 - chosen);
-NCoreNum = 1 << chosen;
-```
+### QuantGMM 2D M/N Split（已验证算法）
+运行时从 L0C 容量反推最优 split：`l0CMNFractal=256`，遍历选 MTE2 流量最小的 M/N 核数配比。
 
 ### GEMV 阈值切换
+M ≤ 阈值时 Normal MM → GEMV（逐行 Mmad + Dequant），避免 padding 浪费。
 
-当 M <= GEMV_THRESHOLD(=8) 或 workspace 较小时：Normal MM → GEMV（逐行 Mmad + Dequant），避免浪费的 padding 计算。
+## 量化 UB 预算
 
-## 量化场景 UB Buffer 分配
+通用：`UB = 激活×2(double buffer) + Weight + Scale + Workspace`。各算子 Scale 预算因 PerChannel/PerToken/PerGroup 而异，精确公式见 `*_antiquant_*.h`。
 
-### 通用预算公式
+## 三阶流水（A8W4 MSD）
 
-```
-UB_Budget = 激活 × 2 (double buffer) + Weight + Scale + Workspace
-```
-
-### 各算子 Scale 预算
-
-| 算子 | Scale 模式 | UB 预算计算 |
-|------|-----------|------------|
-| grouped_matmul (A2A3) | PerChannel / PerToken / PerGroup | `baseN * sizeof(float) * 2` (double buffer) |
-| grouped_matmul_finalize_routing | PerChannel + PerToken | scale_queue + perToken_queue + dequant_middle + muls_result + bias + shared_tmp |
-| grouped_matmul_swiglu_quant | PerChannel + PerToken | `n * 4 * 2 + tokenLen * 4` |
-| quant_grouped_matmul_inplace_add (A5) | PERTENSOR + PERCHANNEL | `baseM * sizeof(float)` ping-pong via BlockEpilogueDequant |
-
-### SwiGLU Quant UB 计算（A8W8）
-
-```
-tmpBufSize = (n/2) * 4        // SwiGLU reduce workspace
-perChannelBuf = n * 4 * 2     // double buffered channel scale
-remainingUb = ubSize - tmpBuf - perChannelBuf
-maxRowInUb = remainingUb / (n*4 + n/2 + 4) / 2
-```
-
-### SwiGLU Quant UB 计算（A8W4 MSD）
-
-```
-8.5 * row * n + 4 * alignUp(row, 8) + 6n + 64 <= ubSize
-```
-
-## 三阶流水线（A8W4 MSD）
-
-```
-for each workspaceSplitLoopIdx:
-  // Stage 1: PreProcess (n+1) - weight cast in AIV
-  // Stage 2: MidProcess (n) - matmul in AIC  
-  // Stage 3: PostProcess (n-1) - dequant + SwiGLU + requant in AIV
-```
-
-滑动窗口：迭代 n 的 MidProcess 与 n+1 PreProcess、n-1 PostProcess 重叠。
-
-## Pre-deferred MMCompute 模式
-
-```cpp
-while (curBlock < curCount) {
-    MnBlockIdxCompute(mnConfig, ...);
-    computeOp.MmCompute(lastMnConfig, blockIdx);     // 算上一个
-    computeOp.MmComputePrepare(groupIdx, mnConfig);   // 准备当前（软件预取）
-    curBlock += coreNum;
-}
-computeOp.MmCompute(lastMnConfig, blockIdx);  // 最后一个
-```
-
-## Atomic Add 机制（grouped_matmul_add）
-
-多核写重叠输出位置时自动原子累加：
-```cpp
-SetAtomicAdd<float>();
-DataCopyPad(yGm[outOffset], tensorIn, copyParams);
-SetAtomicNone();
-```
+PreProcess(n+1) / MidProcess(n) / PostProcess(n-1) 滑动窗口重叠：weight cast(AIV) → matmul(AIC) → dequant+SwiGLU+requant(AIV)。
 
 ## V1 → V2 演进
 
-| 特性 | V1 | V2 |
-|------|-----|-----|
-| TILING_KEY | 0/1/2 | 0/2/3/4/5 |
-| A4W4 支持 | ❌ | ✅ |
-| groupListType | cumsum only | cumsum + direct count |
-| Fusion path | ❌ | ✅ GroupedMatmulDequantSwigluQuantFusion |
-| A5 优化 | — | CUSTOM_CFG_MDL (enableGetTensorC=true) |
+V2 新增：A4W4 支持、groupListType direct count、GroupedMatmulDequantSwigluQuantFusion、A5 CUSTOM_CFG_MDL。
 
 ## 来源
-- Agent 深度分析 `gmm/` 全部 7 个算子目录 11 个 kernel 文件
+- `ops-transformer_AI/gmm/`（find 全文件 + grep thresholdDimM/MNBlockIdxCompute 验证）

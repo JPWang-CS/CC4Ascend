@@ -15,7 +15,7 @@ metadata:
 - Build order across repos: ops-nn first — see [[ascendc-workflow-prefs]].
 
 ## In-workspace dirs (under D:/Desktop/Code/CC4Ascend/)
-- **.claude/skills/** — 8 callable AscendC skills (migrated from the old project-root `skills/` dir): `ascendc-api`, `ascendc-data-context`, `ascendc-debug`, `ascendc-development`, `ascendc-install`, `ascendc-operator-invocation`, `ascendc-operators`, `ascendc-hardware`. Auto-discovered; trigger by `/ascendc-*` or description match. See [[spec-sources]].
+- **.claude/skills/** — 14 callable AscendC skills: `ascendc-api` / `ascendc-kernel-programming` / `ascendc-data-context` / `ascendc-debug` / `ascendc-development` / `ascendc-doc-sync` / `ascendc-hardware` / `ascendc-install` / `ascendc-operator-invocation` / `ascendc-aclgraph` / `ascendc-operators` / `ascendc-kernel-optimization` + procedural `ascendc-build-errors` / `ascendc-golden-testing`. Auto-discovered; trigger by `/ascendc-*` or description match. See [[spec-sources]].
 - **.claude/agent-memory/ascendc-architect/** — this agent memory (flat 30-file index, general expert knowledge + QBMM project closure).
 - **projects/QBMM-Batch/** — QBMM-Batch design docs + golden scripts — see [[qbmm-batch-status]].
 

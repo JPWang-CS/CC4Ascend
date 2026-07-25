@@ -1,5 +1,7 @@
 # SIMT 编程范式（A5 专属）
 
+> **速查摘录**：本文是从 `cross_platform_migration_guide.md` §SIMT 抽取的快速查阅版。权威以迁移指南为准；gather_v2 完整对比见 `ops-transformer_AI/docs/zh/develop/cross_platform_migration_guide.md`。
+
 ## 概述
 
 Ascend 950 新增 **SIMT** 单元，处理非规整离散访问方面比 SIMD 更优。适合地址不连续、访存跨度变化大、分支路径不一致的场景（scatter/gather, 索引重排, 稀疏更新）。

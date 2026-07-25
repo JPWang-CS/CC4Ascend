@@ -53,6 +53,12 @@ cannsim report -e /path/to/cannsim_* -n '0-1, 11-12'
 # W:放大 S:缩小 A:左移 D:右移
 ```
 
+## trace 文件路径
+
+性能流水文件在 `cannsim_*/report/results/kernel_*/core_*/trace_core0.json`（真实路径，cann_sim.md:70）。
+
+Chrome 中打开：`chrome://tracing` → 拖入 json。W 放大 / S 缩小 / A 左移 / D 右移。
+
 ## 流水字段解读
 
 | 字段 | 含义 |

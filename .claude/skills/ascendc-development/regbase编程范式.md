@@ -1,5 +1,7 @@
 # Regbase 编程范式（A5 专属）
 
+> **速查摘录**：本文是从 `cross_platform_migration_guide.md` §Regbase 抽取的快速查阅版。权威以迁移指南为准；完整代码与迁移建议见 `ops-transformer_AI/docs/zh/develop/cross_platform_migration_guide.md`。
+
 ## 概述
 
 Ascend 950 引入 **Regbase** 编程范式（`AscendC::MicroAPI`），相比传统 Membase（Vector API）更接近底层硬件寄存器操作，提供更精细的向量化控制。

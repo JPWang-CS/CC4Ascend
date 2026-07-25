@@ -1,5 +1,7 @@
 # Cube-Vector 融合通路（A5 专属）
 
+> **速查摘录**：本文是从 `cross_platform_migration_guide.md` §Cube-Vector融合 抽取的快速查阅版。权威以迁移指南为准；核间同步 mode 3 的完整说明见同指南 §核间同步。
+
 ## 概述
 
 Ascend 950 引入 **UB↔L1** 和 **L0C→UB** 直连通路，让 Cube 和 Vector 计算在片上直接交换数据，无需经 GM 中转。
