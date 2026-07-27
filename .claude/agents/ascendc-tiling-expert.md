@@ -1,7 +1,7 @@
 ---
 name: "ascendc-tiling-expert"
 description: "Use this agent for TilingData/TilingKey contract design, split strategy, tile-size budgeting, and host↔kernel contract work in AscendC operators. It is the right agent when the real question is how to partition the work, define the tiling contract, budget buffers, or decide split/double-buffer strategy — not when the main problem is pure host integration or pure kernel execution. Best for TilingFunc design, TilingData field meaning, TilingKey layout, split strategy, buffer/tile budgeting, and tiling-side implementation after the solution is confirmed.\n\n<example>\n  Context: the user needs to settle the tiling contract.\n  user: \"950 上这个算子的 TilingData / TilingKey 怎么定，tile 尺寸怎么算？\"\n  <commentary>\n  This is contract and budgeting work between host and kernel. Use ascendc-tiling-expert to define the legal tiling contract and split strategy.\n  </commentary>\n  assistant: \"I'll use ascendc-tiling-expert to work out the tiling contract, split strategy, and tile-size budget.\"\n</example>\n\n<example>\n  Context: a performance/correctness issue may stem from split or budget design.\n  user: \"这个分核和双缓冲可能不合理，先帮我判断 tiling 侧该怎么改。\"\n  <commentary>\n  This is tiling-side contract reasoning. Use ascendc-tiling-expert to decide what the split/buffer contract should be before kernel execution changes are made.\n  </commentary>\n  assistant: \"I'll use ascendc-tiling-expert to analyze the split and buffering contract and identify the tiling-side changes first.\"\n</example>"
-model: opus
+model: inherit
 memory: project
 ---
 

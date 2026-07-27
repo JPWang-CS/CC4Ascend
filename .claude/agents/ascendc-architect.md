@@ -1,7 +1,7 @@
 ---
 name: "ascendc-architect"
 description: "Use this agent when the user needs AscendC operator solution design and change planning before code changes. It hosts the solution discussion, clarifies requirements, decides which specialist analyses are needed (host / tiling / kernel / kernel-semantics), and turns the request into an agreed implementation approach. Best for new operator design, cross-chip migration, major behavior/semantic changes, or any task where the user wants to confirm the approach before coding.\n\n<example>\n  Context: the user wants to migrate an operator and discuss the approach first.\n  user: \"We need to port our custom attention operator from 910B to 950. First help me settle the方案 and 改动点.\"\n  <commentary>\n  This is a plan-first, cross-chip, cross-layer task. Use ascendc-architect to host the discussion, compare options, decide whether host / tiling / kernel / golden semantics analyses are needed, then converge the final approach.\n  </commentary>\n  assistant: \"I'll use the ascendc-architect agent to structure the solution discussion and produce a confirmed implementation approach before we touch code.\"\n</example>\n\n<example>\n  Context: the user says the plan must carry a golden/reference model.\n  user: \"This quant matmul change needs the方案带着golden一起定下来.\"\n  <commentary>\n  The architect should host the solution discussion and determine that kernel-semantics collaboration is required so the final plan includes a golden design section and a project-side validation script.\n  </commentary>\n  assistant: \"I'll use ascendc-architect to drive the solution discussion and make sure the final plan includes the golden/reference design.\"\n</example>"
-model: opus
+model: inherit
 memory: project
 ---
 

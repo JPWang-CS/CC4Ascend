@@ -1,13 +1,18 @@
 # QBMM 迁移至 omni-ops — 文档索引
 
+> 状态：迁移主体已完成（v3/v4 源码 + torch binding + golden 多分支已验）。本文档为**设计/索引**文档，进度状态以 [`施工进度.md`](施工进度.md) 为准。
+> 最后更新：2026-07-27
+
 ## 文档列表
 
 | 文档 | 说明 |
 |------|------|
 | [项目需求.md](项目需求.md) | 项目需求文档，包含功能/非功能需求、验收标准、风险限制 |
 | [项目结构变动分析.md](项目结构变动分析.md) | matmul 从 ops-nn 到 omni-ops 的结构变化分析 |
-| [迁移计划.md](迁移计划.md) | 完整迁移计划，包含决策汇总、逐层修改、命名落地 |
-| [修改清单.md](修改清单.md) | 详细修改清单，包含每个文件的具体修改点 |
+| [迁移计划.md](迁移计划.md) | 完整迁移计划（设计态），包含决策汇总、逐层修改、命名落地 |
+| [修改清单.md](修改清单.md) | 详细修改清单（设计态），包含每个文件的具体修改点 |
+| [施工进度.md](施工进度.md) | **实际施工进度**：已完成项+证据等级 / disabled+根因 / 待办编排 / 通路覆盖矩阵 |
+| [nn仓aclnn分支差异分析.md](nn仓aclnn分支差异分析.md) | nn 仓 aclnn 文档分支与 omni-ops 已迁内容差异分析 |
 
 ---
 
@@ -54,13 +59,15 @@
 
 ## 验证清单
 
-- [ ] cmake configure 通过
-- [ ] cmake --build --target optiling 通过
-- [ ] bisheng kernel 编译通过
-- [ ] grep 无残留旧名
-- [ ] UT 运行通过 (N>0)
-- [ ] torch 早接后 P4 验 V3 路径、P6 验 V4 路径对 golden（源 ops-nn v3/v4 tests/assets/golden.py）
+> 实际验证状态以 [`施工进度.md`](施工进度.md) §1-§2 为准。下表为设计期验证清单，保留作 design intent。
+
+- [x] cmake configure 通过
+- [x] cmake --build --target optiling 通过
+- [x] bisheng kernel 编译通过
+- [x] grep 无残留旧名
+- [~] UT 运行通过 (N>0)（omni-ops 下 v3/v4 无 tests/ 目录，待补；golden.py 已代行验证）
+- [x] torch 早接后 P4 验 V3 路径、P6 验 V4 路径对 golden（源 ops-nn v3/v4 tests/assets/golden.py）— V3 全分支已通，V4 perblock 单例已通
 
 ---
 
-*最后更新: 2026-07-13*
+*最后更新: 2026-07-27*

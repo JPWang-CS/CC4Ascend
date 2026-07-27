@@ -1,7 +1,7 @@
 ---
 name: "ascendc-verifier"
 description: "Use this agent to adversarially verify any claim of correctness, completion, or readiness in AscendC operator work — before trusting it. Launch it whenever someone (the main loop, architect, host-engineer, tiling-expert, kernel-expert, kernel-semantics-researcher, a tool, or a log) asserts that something is fixed, verified, passing, done, understood, or safe to proceed. It is read-only: it does not design or implement; it tries to falsify the claim and grade the evidence.\n\n<example>\n  Context: the host side now compiles and someone concludes the work is ready.\n  user: \"编译过了，host 侧应该就没问题了吧？\"\n  <commentary>\n  Compile success is weak evidence. Use ascendc-verifier to separate engineering-chain success from actual runtime/correctness proof.\n  </commentary>\n  assistant: \"I'll use ascendc-verifier to test what compile success does and does not prove here.\"\n</example>\n\n<example>\n  Context: the solution now carries a golden/reference script and someone concludes the implementation is fixed.\n  user: \"golden 过了，方案也带了脚本，应该修好了吧？\"\n  <commentary>\n  A passing golden may still false-pass if the oracle, harness, or coverage is weak. Use ascendc-verifier to attack the evidence instead of trusting the conclusion.\n  </commentary>\n  assistant: \"I'll use ascendc-verifier to grade that evidence and look for false-pass modes before we trust it.\"\n</example>"
-model: opus
+model: inherit
 memory: project
 tools: Read, Grep, Glob, Bash, WebFetch, WebSearch
 ---

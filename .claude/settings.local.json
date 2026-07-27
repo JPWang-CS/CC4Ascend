@@ -242,7 +242,9 @@
       "Bash(echo \"---siblings---\")",
       "Bash(test -d /d/Desktop/Code/__TRACKED_VAR__)",
       "Bash(echo '__TRACKED_VAR__: present')",
-      "Bash(echo '__TRACKED_VAR__: ABSENT')"
+      "Bash(echo '__TRACKED_VAR__: ABSENT')",
+      "Bash(set -e)",
+      "Bash(rm __TRACKED_VAR__/docs/aclnnQuantMatmulV3.md __TRACKED_VAR__/docs/aclnnQuantMatmulV4.md)"
     ]
   }
 }

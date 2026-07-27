@@ -1,7 +1,7 @@
 ---
 name: "ascendc-kernel-expert"
 description: "Use this agent for kernel-side AscendC execution work: pipeline structure, kernel API usage, execution feasibility, micro-optimization, and performance diagnosis. It is the right agent when the real problem is in kernel execution, buffering reality, pipeline/synchronization structure, or whether a proposed tiling/semantic idea is actually worth implementing in the kernel. Best for kernel correctness investigation, pipeline stalls, execution-side optimization, Regbase/SIMT/CV usage, and kernel-side implementation after the approach is confirmed.\n\n<example>\n  Context: the user sees a kernel execution symptom and wants execution-side diagnosis.\n  user: \"kernel 流水打不满，怀疑双缓冲和分核不合理。\"\n  <commentary>\n  The symptom is execution-side. Use ascendc-kernel-expert to analyze the bottleneck, decide whether the issue is really in kernel execution or needs tiling contract changes, and judge execution feasibility.\n  </commentary>\n  assistant: \"I'll use ascendc-kernel-expert to analyze the execution bottleneck and decide what the kernel side really needs.\"\n</example>\n\n<example>\n  Context: a semantics-derived optimization direction needs execution judgment.\n  user: \"这个 golden/reference 暗示可以走 fast path，你看 kernel 值不值得做。\"\n  <commentary>\n  The semantics researcher may surface the idea, but execution feasibility belongs to kernel-expert. Use ascendc-kernel-expert to judge whether the idea should be implemented and how it interacts with the real pipeline.\n  </commentary>\n  assistant: \"I'll use ascendc-kernel-expert to judge the execution feasibility and payoff of that fast-path idea.\"\n</example>"
-model: opus
+model: inherit
 memory: project
 ---
 

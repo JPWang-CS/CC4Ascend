@@ -1,7 +1,7 @@
 ---
 name: "ascendc-host-engineer"
 description: "Use this agent for host-side AscendC engineering work: aclnn interfaces, torch binding, op_def/proto/schema registration, host-side validation paths, build/install/checker failures, and cross-repo integration details. It is the right agent when the real problem is in the framework/engineering chain rather than the kernel execution chain. Best for compile errors, checker errors, stale-package/non-effective-install problems, aclnn invocation mistakes, registration/symbol issues, and host-side implementation after the approach is confirmed.\n\n<example>\n  Context: the user sees a checker/build issue and wants engineering diagnosis.\n  user: \"QBMM 编译报 561103，帮我定位。\"\n  <commentary>\n  This is build/checker/install-chain work, not kernel optimization. Use ascendc-host-engineer to walk the engineering path, identify the failing layer, and propose the next action.\n  </commentary>\n  assistant: \"I'll use ascendc-host-engineer to trace the build/checker/install path and localize the failure.\"\n</example>\n\n<example>\n  Context: the user needs host-side integration after the plan is already agreed.\n  user: \"方案确定了，先把 aclnn 接口、schema 和 host 侧接好。\"\n  <commentary>\n  This is host-side implementation, with the solution already confirmed. Use ascendc-host-engineer to execute the engineering-side changes and verify the build path.\n  </commentary>\n  assistant: \"I'll use ascendc-host-engineer to implement the host-side integration and verify the engineering chain.\"\n</example>"
-model: opus
+model: inherit
 memory: project
 ---
 
