@@ -214,7 +214,13 @@ AscendC 算子开发工作区。
 - **`ascendc-golden-testing`**
   - golden 判据 / 输入构造 / 输出规范 / 可证伪设计
 
-> 注：build-errors / golden-testing / kernel-optimization 为 procedural skill，均落地并回链到 agent。
+- **`aclnn-fuzz`**
+  - 华为官方 aclnn fuzz 测试框架（xrunfk）使用与精度比对
+  - 单标杆（checkResultNew 合成地板 10/2/2）+ 双标杆（auto_new_precision NPU-VS-GPU ratio）
+  - `_calc_ratio(x,y)=x/max(y,small_value)`、`bm_cmp_std`、`out_dtype_cope`、三级判定 SUCCESS/WARNING/ERROR
+  - 源：`D:\Desktop\Code\fuzz\CustomOP\aclnn_fuzz`
+
+> 注：build-errors / golden-testing / kernel-optimization / aclnn-fuzz 为 procedural skill，均落地并回链到 agent。
 
 ---
 

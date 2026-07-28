@@ -1,0 +1,126 @@
+---
+name: aclnn-fuzz
+description: 华为官方 aclnn fuzz 测试框架（xrunfk）的使用与精度比对。支持两种精度路径：单标杆(checkResultNew 合成地板，NPU vs golden，阈值 10/2/2) + 双标杆(auto_new_precision NPU-VS-GPU ratio，算子精度标准v1.0 完整实现)。覆盖框架结构、用例生成、CPU/GPU 标杆生成、NPU 执行、三精度方法(0/1/2)、双标杆 ratio(最大/平均相对误差比·均方根误差比·ULP比·小值域比)+RMSE直方图。当查官方精度比对怎么实现、双标杆怎么跑、阈值怎么配、怎么加 aclnn 用例时调用。源：D:\Desktop\Code\fuzz\CustomOP\aclnn_fuzz（官方下载）。
+---
+
+# aclnn-fuzz 测试框架
+
+华为官方 aclnn 算子 fuzz/精度测试框架。源：`D:\Desktop\Code\fuzz\CustomOP\aclnn_fuzz`（34000+ 文件）。主入口 `xrunfk.py`。
+
+## 框架定位
+
+测 aclnn 算子：生成用例 → 出标杆 → NPU 跑 → 比对精度。是**算子精度标准 v1.0 的官方落地实现**（`D:\Desktop\TMP\log.txt` 是理论文档，本框架是代码实现）。
+
+## 目录结构
+
+| 路径 | 用途 |
+|---|---|
+| `xrunfk.py` | 主入口（create/bm/run） |
+| `Aclnn/` | aclnn C++ 测试框架（gen_code.py 生成、build_*.sh 编译） |
+| `configs/` | 系统配置（精度阈值/dtype/op 映射/环境 ini） |
+| `libs/tools.py` | **单标杆比对核心**（checkResult / checkResultNew） |
+| `auto_new_precision.py` / `_mm.py` | **双标杆自动化**（NPU+GPU+golden 全流程 + ratio 统计） |
+| `tools/op_precision/` | 新精度比对工具（new_precision_transfer.py 等） |
+| `design/` `excel/` | DesignFile/Excel（用例源头） |
+| `case_generator/` | yaml→dtype/shape 泛化用例 |
+| `script/` | 脚本（update_precision_threshold.py） |
+
+## 两条精度路径
+
+### 路径 A：单标杆（合成地板，`libs/tools.py::checkResultNew`）
+
+xrunfk.py 正常跑用这个。NPU 输出 vs CPU golden，**无 GPU 标杆**。
+
+- `diff_big_ratio = |NPU - golden| / |golden|`（大值逐元素相对误差）
+- 指标：max/avg/rmse 相对误差 + 小值域 err_small + red(相对误差分布)
+- 阈值 `configs/aclnn_op_bm_cmp_std.json`：max_re_rtol=10 / avg_re_rtol=2 / rmse_rtol=2（fp32/fp16/bf16 同；配合 dtype 分辨率地板用）
+- small_value: fp32=1e-6/fp16=1e-3/bf16=1e-7；small_value_atol: 0/1e-3/4e-3
+- red_range: fp32=1e-6/1e-5/1e-4/5e-4，fp16/bf16=1e-3/2e-3/5e-3/1e-2
+- inf/nan 处理：golden_inf_switch / inf_clip_switch / nan_toZero_switch（xrunfk.ini）
+
+### 路径 B：双标杆（NPU-VS-GPU ratio，`auto_new_precision.py` / `_mm.py`）
+
+**算子精度标准 v1.0 的完整实现**。NPU + GPU 都跑，CPU（或 GPU）出 golden，算 NPU/GPU 双方对 golden 的误差比。
+
+**全流程**（`auto_new_precision.py main()`）：
+```
+Step1 清远程 GPU 服务器 → Step2 生成用例 → Step3 在 GPU 上执行 bm(标杆)
+→ Step4 拷 GPU 结果回 NPU → Step5 bm_output_gold(CPU golden) → Step6 NPU 执行
+→ Step7 转新精度 csv(双标杆 ratio 统计)
+```
+
+**ratio 列**（`auto_new_precision_mm.py` result_analysis，全标 "NPU VS GPU"）：
+- 最大 ULP 误差比 / 平均 ULP 误差比
+- **最大相对误差比 / 平均相对误差比**
+- **均方根误差比**（RMSE ratio）
+- 小值域误差比
+- 逐点绝对误差通过率
+
+**ratio 核心公式**（`tools/op_precision/op_precision_stat.py::BenchmarkCompareStandard._calc_ratio`）：
+```python
+def _calc_ratio(x, y):  # x=NPU_err, y=GPU_err
+    if y == 0 and x == 0: return 1.0
+    return x / max(y, small_value)   # ← small_value 当分母地板，防 benchmark_err≈0 退化
+```
+`small_value` = bm_cmp_std 的 small_value（**fp16=1e-3 / fp32=1e-6 / bf16=1e-7**）。这是**双标杆对 int8 不退化的关键**——int8 时 GPU cuBLAS≈CPU MKL（benchmark_err≈0），但分母地板是 small_value(1e-3)，ratio=NPU_err/1e-3≈1（fp16 cast 也≈1e-3）→ PASS。
+
+**阈值**（`BenchmarkCompareStandard`，来自 `aclnn_op_bm_cmp_std.json`）：`max_re_rtol=10 / avg_re_rtol=2 / rmse_rtol=2`（跟单标杆同套数，**不是标准文档 L1 的 5/1.5/1.5**）。
+
+**三级判定**（`PrecisionCheckResult`，比 PASS/FAIL 更细）：
+| ratio | 判定 | 含义 |
+|---|---|---|
+| ≤ 1.0 | SUCCESS | NPU 不劣于 GPU |
+| 1.0 < ratio ≤ rtol | WARNING | NPU 比 GPU 差但在容限 |
+| > rtol(10/2/2) | ERROR | NPU 显著差于 GPU |
+
+**GPU 标杆可用性自检**（`gpu_precision_check` flag）：若 GPU 自身误差 >90% 落在最大直方图桶（GPU 太精，benchmark_err≈0），关闭精度检查（防退化误判）。
+
+**RMSE 直方图**（`histogram_cmd`）：ratio 分布 0~0.2 / 0.2~0.4 / ... / 1.0~1.2 / 1.2~1.4 / ... / >2.0——对应标准 L0/L1/L2 阈值区间（L1≈1.5、L2≈1.2）。
+
+**参数**：`--precision_mode benchmark`（双标杆，默认）/ `binary`；`--golden_mode gpu/cpu`（golden 取 GPU 还是 CPU）。
+
+**依赖**：远程 GPU 服务器（`configs/auto_new_precision.ini` 的 n2_host/user/port/ssh_key + `configs/gpu_info.json` passwd）。
+
+## 三精度方法（`precision_method`，路径 A 内细分）
+
+`configs/xrunfk.ini` 或 `configs/aclnn_op_pre_method.json`（算子级优先）切换（仅路径 A）：
+
+| method | 算法 | 默认阈值 |
+|---|---|---|
+| 0（默认） | 相对误差+准确率 | diff_thd=1e-4 / pct_thd=0.999 / max_diff_thd=0.1 |
+| 1 | np.isclose | rtol=0.005 / atol=2.5e-5 |
+| 2（新·算子精度标准v1.0） | 标杆对比法(单标杆合成地板) | max_re_rtol=10/avg=2/rmse=2 + small_value/red |
+
+> method 2 是路径 A 的"新精度"模式（单标杆）。**双标杆是路径 B（auto_new_precision）**，独立于 precision_method，需 GPU 服务器。
+
+## 配置阈值（README 七节）
+
+- **路径 A method 2**：`configs/aclnn_op_bm_cmp_std.json`（按算子+dtype）+ `aclnn_op_red_range.json`
+- **路径 A method 0/1**：`op_report.json`（按算子名）或 `aclnn_op_dtype.json`（按 dtype，优先级高）
+- 配完跑 `script/update_precision_threshold.py -d <op>` 更新 cs（cs 优先级 > ini）
+
+## 工作流
+
+```
+python3 xrunfk.py create aclnnMatmul all           # 生成用例
+python3 xrunfk.py bm_output_gold aclnnMatmul all   # CPU golden（路径 A）
+python3 xrunfk.py bm aclnnMatmul all               # 跑 bm
+# 路径 A（单标杆）: xrunfk 正常跑 → checkResultNew 比对
+# 路径 B（双标杆）: python3 auto_new_precision_mm.py --op aclnnMatmul --precision_mode benchmark
+#                  （自动 NPU+GPU+golden+ratio 统计，需 GPU 服务器）
+```
+
+## 何时用本 skill
+
+- 查官方双标杆**实际怎么跑**（auto_new_precision NPU-VS-GPU ratio）→ 本 skill
+- 查单标杆合成地板实现（checkResultNew）→ 本 skill
+- 怎么配精度阈值 / 加 aclnn 测试用例 → 本 skill + README 七节
+- 写 project golden 对齐官方 → 本 skill + ascendc-golden-testing
+- 标准理论文档（L0/L1/L2、复检）→ ascendc-golden-testing/criteria.md
+
+## 边界
+
+- 编译/报错 → ascendc-build-errors
+- 差异归因 → ascendc-kernel-semantics-researcher
+- golden 判据理论 + project golden 脚本 → ascendc-golden-testing
+- 本 skill 讲**官方 aclnn_fuzz 框架**（双标杆 + 单标杆 + 阈值配置）

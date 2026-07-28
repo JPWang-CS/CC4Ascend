@@ -97,8 +97,11 @@ def _u64_to_deq_scale(u64_scale):
     return deq_u32.view(np.float32).reshape(u64_scale.shape)
 
 
-def _cast_output(arr, dtype_name):
+def _cast_output(arr, dtype_name, acc_dtype=None):
     # ops-nn _cast_output_dtype (砍 A5 dtype); bfloat16 numpy 无原生 → 留 fp32 高精参考, tol 吸收舍入
+    # C2: acc_dtype 传入时, golden 在 acc_dtype (fp64) 域返回, 不降 cast (作高精度参考; benchmark 才 cast 到 out_dtype)
+    if acc_dtype is not None:
+        return arr.astype(acc_dtype)
     m = {"float16": np.float16, "float32": np.float32, "int32": np.int32, "int8": np.int8}
     if dtype_name == "bfloat16":
         return arr.astype(np.float32)
@@ -124,42 +127,44 @@ def _is_bias_vec(x1_dtype, bias_dtype):
         bias_dtype in ("bfloat16", "float16", "float32")
 
 
-def _br(sc, out_ndim, axis):
+def _br(sc, out_ndim, axis, acc_dtype=np.float32):
     # broadcast scale 到 out_ndim (插维对齐): [N]→[1,N], [B,N]→[B,1,N]; [M]→[M,1], [B,M]→[B,M,1]
     while sc.ndim < out_ndim:
         sc = np.expand_dims(sc, axis)
-    return sc.astype(np.float32)
+    return sc.astype(acc_dtype)
 
 
-def _compute_tc(mm, x2_scale, bias, bias_dtype, do_scale_gen, is_bias_vec, y_dtype):
+def _compute_tc(mm, x2_scale, bias, bias_dtype, do_scale_gen, is_bias_vec, y_dtype, acc_dtype=np.float32):
     # ops-nn _compute_tc: T-C (pertensor/perchannel/int4sym). bias 位置由 is_bias_vec 定。
+    # acc_dtype: scale apply 域精度 (golden_ref 传 fp64 提精度, self-test 默认 fp32).
+    # C2: golden 路径 acc_dtype=fp64 时, _cast_output 也保 fp64 不降 (高精度参考).
     out = mm
     if not is_bias_vec and bias is not None:
         if bias_dtype == "int32":
             out = out + bias  # int32 域前加
         elif bias_dtype in ("float32", "bfloat16"):
             out = out.astype(np.float32) + bias.astype(np.float32)
-    out = out.astype(np.float32)
+    out = out.astype(acc_dtype)
     if do_scale_gen:
         x2_scale = _scale_generate(x2_scale)
-    out = out * _br(x2_scale, out.ndim, -2)
+    out = out * _br(x2_scale, out.ndim, -2, acc_dtype)
     if is_bias_vec and bias is not None:
-        return _cast_output(out + bias.astype(np.float32), y_dtype)
-    return _cast_output(out, y_dtype)
+        return _cast_output(out + bias.astype(acc_dtype), y_dtype, acc_dtype=acc_dtype if acc_dtype != np.float32 else None)
+    return _cast_output(out, y_dtype, acc_dtype=acc_dtype if acc_dtype != np.float32 else None)
 
 
-def _compute_pertoken(mm, x2_scale, x1_scale, bias, bias_dtype, is_bias_vec, y_dtype):
+def _compute_pertoken(mm, x2_scale, x1_scale, bias, bias_dtype, is_bias_vec, y_dtype, acc_dtype=np.float32):
     # ops-nn _compute_pertoken: K-C (int8 pertoken, A2A3 非 is_two_scale 双标量分支)。
     out = mm
     if bias is not None and bias_dtype == "int32":
         out = out + bias  # int32 bias 前加
-    out = out.astype(np.float32)
-    out = out * _br(x2_scale, out.ndim, -2) * _br(x1_scale, out.ndim, -1)  # [..,1,N] × [..,M,1]
+    out = out.astype(acc_dtype)
+    out = out * _br(x2_scale, out.ndim, -2, acc_dtype) * _br(x1_scale, out.ndim, -1, acc_dtype)
     if not is_bias_vec and bias is not None and bias_dtype == "float32":
-        out = out + bias.astype(np.float32)
+        out = out + bias.astype(acc_dtype)
     if is_bias_vec and bias is not None:
-        return _cast_output(out + bias.astype(np.float32), y_dtype)
-    return _cast_output(out, y_dtype)
+        return _cast_output(out + bias.astype(acc_dtype), y_dtype, acc_dtype=acc_dtype if acc_dtype != np.float32 else None)
+    return _cast_output(out, y_dtype, acc_dtype=acc_dtype if acc_dtype != np.float32 else None)
 
 
 def _compute_requant(mm, x2_scale, offset, bias, bias_dtype):
@@ -438,6 +443,7 @@ def golden_ref(d: dict, c: Case) -> np.ndarray:
         sc = _u64_to_deq_scale(sc)                               # uint64 → fp32 deq_scale (已截断)
     elif d["scale_dtype_str"] == "bfloat16":
         sc = _fp32_to_bf16_sim(sc)                               # fp32 → bf16 截断 (对齐 NPU BF16 scale 精度)
+    sc = sc.astype(np.float32)  # 对齐框架 aclnn_op_func: scale fp32 域, golden cast 到 out_dtype
     bdtype = d["bias_dtype"]
     ydt = c.out_dtype
 
@@ -446,14 +452,14 @@ def golden_ref(d: dict, c: Case) -> np.ndarray:
         return _compute_int32(mm, d["bias"], bdtype)
 
     if c.mode in ("pertensor", "perchannel", "int4sym"):
-        do_sg = _needs_scale_generate(x1dt, d["scale_dtype_str"], sc, bdtype)
+        do_sg = _needs_scale_generate(x1dt, d["scale_dtype_str"], sc.astype(np.float32), bdtype)
         bv = _is_bias_vec(x1dt, bdtype)
         return _compute_tc(mm, sc, d["bias"], bdtype, do_sg, bv, ydt)
     if c.mode == "pertoken":
         bv = _is_bias_vec(x1dt, bdtype)
-        return _compute_pertoken(mm, sc, d["pertoken_scale"], d["bias"], bdtype, bv, ydt)
+        return _compute_pertoken(mm, sc, d["pertoken_scale"].astype(np.float32), d["bias"], bdtype, bv, ydt)
     if c.mode == "requant":
-        return _compute_requant(mm, sc, d["offset"], d["bias"], bdtype)
+        return _compute_requant(mm, sc.astype(np.float32), d["offset"], d["bias"], bdtype)
     if c.mode == "int32":
         return _compute_int32(mm, d["bias"], bdtype)
     if c.mode == "a8w4":
@@ -491,6 +497,124 @@ def golden_ref(d: dict, c: Case) -> np.ndarray:
             out = out + d["bias"].astype(np.float32)
         return _cast_output(out, ydt)
     raise ValueError(f"unknown mode {c.mode}")
+
+
+# ============================================================
+# benchmark_ref — CPU fp32 拼接标杆 (双标杆 Ratio 制, 方案 §1)
+#   与 golden_ref 的区别: 两者现在都 fp32 + cast out_dtype (对齐框架 out_dtype_cope);
+#   golden 是 int32 精确累加 oracle, benchmark 是 fp32 累加拼接 (int8→fp32 精确整数, 等价 NPU int32 L0C)。
+#   int8/int4 → fp32 = 精确整数累加 (A1 已验证等价 NPU int32 L0C), 不做 K-chunk。
+#   不复用 _compute_* (那是 oracle), 独立写一份同 apply 顺序的 fp32 版。
+#   int 输出 (int32/int8) 不涉 ratio (标准 4.4), 直接返回 None (run 里跳过)。
+# ============================================================
+def _br_bmk(sc, out_ndim, axis):
+    # benchmark 版 broadcast (与 _br 同形, fp32 域)
+    while sc.ndim < out_ndim:
+        sc = np.expand_dims(sc, axis)
+    return sc.astype(np.float32)
+
+
+def _cast_output_bmk(arr, dtype_name):
+    # benchmark 版输出 cast: 必须真截断到 out_dtype 精度 (匹配 NPU 输出域)。
+    # bf16 走 _fp32_to_bf16_sim (numpy 无原生 bf16, 用 golden 同款 sim); 否则 benchmark≈golden→Ratio 爆炸。
+    if dtype_name == "bfloat16":
+        return _fp32_to_bf16_sim(arr).astype(np.float32)
+    if dtype_name in ("int32", "int8"):
+        return None
+    m = {"float16": np.float16, "float32": np.float32}
+    return arr.astype(m.get(dtype_name, np.float32))
+
+
+def benchmark_ref(d: dict, c: Case):
+    # int 输出无 ratio 概念 (标准 4.4), benchmark 无意义
+    if c.out_dtype in ("int32", "int8"):
+        return None
+
+    x1dt, x2dt = d["x1_dtype"], d["x2_dtype"]
+    # int8/int4 → fp32 精确整数; 再 fp32 matmul (A1 已验证 = NPU int32 L0C 累加)
+    x1 = d["x1"].astype(np.float32) if x1dt in ("int8", "int4") else d["x1"].astype(np.float32)
+    x2 = d["x2"].astype(np.float32) if x2dt in ("int8", "int4") else d["x2"].astype(np.float32)
+    if c.trans_x1:
+        x1 = np.swapaxes(x1, -1, -2)
+    if c.trans_x2:
+        x2 = np.swapaxes(x2, -1, -2)
+    mm = np.matmul(x1, x2).astype(np.float32)                    # (B,M,N) fp32
+
+    # scale 预处理: 复刻语义陷阱 (与 golden_ref 同: u64 解码 / bf16 截断 / scale_generate)
+    sc = d["scale"]
+    if d["scale_dtype_str"] == "uint64":
+        sc = _u64_to_deq_scale(sc)
+    elif d["scale_dtype_str"] == "bfloat16":
+        sc = _fp32_to_bf16_sim(sc)
+    sc = sc.astype(np.float32)
+    bdtype = d["bias_dtype"]
+    ydt = c.out_dtype
+
+    # ---- pertensor / perchannel / int4sym: T-C, scale[N] broadcast 到 N 维 ----
+    if c.mode in ("pertensor", "perchannel", "int4sym"):
+        do_sg = _needs_scale_generate(x1dt, d["scale_dtype_str"], sc, bdtype)
+        if do_sg:
+            sc = _scale_generate(sc).astype(np.float32)
+        is_vec = _is_bias_vec(x1dt, bdtype)
+        out = mm
+        # int32 bias 前加 (fixpipe 域对齐), float bias 后加
+        if not is_vec and d["bias"] is not None and bdtype == "int32":
+            out = out + d["bias"].astype(np.float32)
+        out = out * _br_bmk(sc, out.ndim, -2)
+        if is_vec and d["bias"] is not None:
+            out = out + d["bias"].astype(np.float32)
+        elif not is_vec and d["bias"] is not None and bdtype in ("float32", "bfloat16"):
+            out = out + d["bias"].astype(np.float32)
+        return _cast_output_bmk(out, ydt)
+
+    # ---- pertoken: K-C, x2_scale[N] × pertoken_scale[M] ----
+    if c.mode == "pertoken":
+        is_vec = _is_bias_vec(x1dt, bdtype)
+        out = mm
+        if d["bias"] is not None and bdtype == "int32":
+            out = out + d["bias"].astype(np.float32)
+        out = out * _br_bmk(sc, out.ndim, -2) * _br_bmk(d["pertoken_scale"].astype(np.float32), out.ndim, -1)
+        if d["bias"] is not None and bdtype in ("float32", "bfloat16"):
+            out = out + d["bias"].astype(np.float32)
+        return _cast_output_bmk(out, ydt)
+
+    # ---- a8w4: MSD, mm × x2Scale[N] × x1Scale[M] + yOffset[N] ----
+    if c.mode == "a8w4":
+        x1s = np.expand_dims(d["pertoken_scale"].astype(np.float32), -1)
+        yoff = d["offset"].astype(np.float32)
+        sc_f = sc.astype(np.float32)
+        while sc_f.ndim < mm.ndim:
+            sc_f = np.expand_dims(sc_f, -2)
+        while yoff.ndim < mm.ndim:
+            yoff = np.expand_dims(yoff, -2)
+        out = mm * sc_f * x1s + yoff
+        return _cast_output_bmk(out, ydt)
+
+    # ---- perblock (G-B): per-tile 累加, 同 golden_ref 结构 (fp32 域) ----
+    if c.mode == "perblock":
+        gM, gN, gK = c.group_sizes if c.group_sizes else (1, 128, 128)
+        x1f = d["x1"].astype(np.float32)
+        x2f = d["x2"].astype(np.float32)
+        x1sf = d["pertoken_scale"].astype(np.float32)
+        x2sf = d["scale"].astype(np.float32)
+        if c.trans_x1:
+            x1f = np.swapaxes(x1f, -1, -2)
+            x1sf = np.swapaxes(x1sf, -1, -2)
+        if c.trans_x2:
+            x2f = np.swapaxes(x2f, -1, -2)
+            x2sf = np.swapaxes(x2sf, -1, -2)
+        m = x1f.shape[-2]; k = x1f.shape[-1]; n = x2f.shape[-1]
+        x2sf_kn = np.repeat(x2sf, gN, axis=-1)[..., :n]
+        out = np.zeros(x1f.shape[:-2] + (m, n), dtype=np.float32)
+        for kt in range((k + gK - 1) // gK):
+            ks = kt * gK; ke = min(ks + gK, k)
+            tile_sc = x1sf[..., kt:kt + 1] * x2sf_kn[..., kt:kt + 1, :]
+            out = out + np.matmul(x1f[..., ks:ke], x2f[..., ks:ke, :]) * tile_sc
+        if d["bias"] is not None:
+            out = out + d["bias"].astype(np.float32)
+        return _cast_output_bmk(out, ydt)
+
+    raise ValueError(f"benchmark_ref unknown mode {c.mode}")
 
 
 # ============================================================
@@ -654,6 +778,87 @@ def bench_verdict(m, out_dtype):
     return (len(reasons) == 0), reasons
 
 
+# ============================================================
+# C2: 双标杆 Ratio 制 (主判据, 方案 §2/§3)
+#   STD_L1: 标准真值 tolerance 表 (threshold/err, §2.2; 不再用 ops-nn 工程数)
+#   ratio_metrics: MARE/MERE/RMSE 三指标 + 小值域 ErrorCount, 分母=max(benchmark_err, err)
+#   ratio_verdict: 主判据 (L1 阈值 mare≤5/mere≤1.5/rmse≤1.5/ec≤2)
+# ============================================================
+STD_L1 = {
+    # 对齐 aclnn_fuzz aclnn_op_bm_cmp_std.json: threshold=small_value(大小值分界+ratio分母地板), err=small_value_atol(小值AE容差)
+    # 框架 _calc_ratio(x,y) = x / max(y, small_value) — small_value 当 ratio 地板防 benchmark_err≈0 退化
+    "float16":  {"threshold": 1e-3, "err": 1e-3},
+    "bfloat16": {"threshold": 1e-7, "err": 4e-3},
+    "float32":  {"threshold": 1e-6, "err": 0.0},
+}
+L1 = {"mare": 10.0, "mere": 2.0, "rmse": 2.0, "ec": 2.0}
+
+
+def ratio_metrics(value, golden, benchmark, out_dtype):
+    # 双标杆三指标 (方案 §3.1): NPU_err / max(benchmark_err, err)
+    # value: torch.Tensor (NPU 输出) 或 np.ndarray; golden/benchmark: np.ndarray。统一拉平到 numpy float64。
+    v = value.reshape(-1).float().cpu().numpy() if hasattr(value, "cpu") else np.asarray(value).reshape(-1)
+    g = np.asarray(golden, dtype=np.float64).reshape(-1)
+    b = np.asarray(benchmark, dtype=np.float64).reshape(-1)
+
+    std = STD_L1[out_dtype]
+    eps = 1e-7
+    gabs = np.abs(g)
+    denom_abs = gabs + eps
+
+    # 正常值域 mask (|golden| >= threshold)
+    big = gabs >= std["threshold"]
+    has_big = bool(big.any())
+
+    npu_ae = np.abs(v - g)
+    bmk_ae = np.abs(b - g)
+    npu_rel = npu_ae / denom_abs
+    bmk_rel = bmk_ae / denom_abs
+
+    # MARE: max(npu_rel[big]) / max(max(bmk_rel[big]), err)
+    mare_npu = float(npu_rel[big].max()) if has_big else 0.0
+    mare_bmk = float(bmk_rel[big].max()) if has_big else 0.0
+    mare = mare_npu / max(mare_bmk, std["threshold"])
+
+    # MERE: avg / max(avg, err)
+    n_big = int(big.sum())
+    mere_npu = float(npu_rel[big].sum() / n_big) if has_big else 0.0
+    mere_bmk = float(bmk_rel[big].sum() / n_big) if has_big else 0.0
+    mere = mere_npu / max(mere_bmk, std["threshold"])
+
+    # RMSE: sqrt(mean(ae²[big])) / max(sqrt(mean(bmk_ae²[big])), err)
+    rmse_npu = float(np.sqrt((npu_ae[big] ** 2).mean())) if has_big else 0.0
+    rmse_bmk = float(np.sqrt((bmk_ae[big] ** 2).mean())) if has_big else 0.0
+    rmse = rmse_npu / max(rmse_bmk, std["threshold"])
+
+    # 小值域 ErrorCount (§2.3)
+    small = ~big
+    ec_npu = int((npu_ae[small] > std["err"]).sum())
+    ec_bmk = int((bmk_ae[small] > std["err"]).sum())
+    ec_ratio = ec_npu / max(ec_bmk, 1)
+
+    return dict(mare=mare, mere=mere, rmse=rmse,
+                mare_npu=mare_npu, mare_bmk=mare_bmk,
+                mere_npu=mere_npu, mere_bmk=mere_bmk,
+                rmse_npu=rmse_npu, rmse_bmk=rmse_bmk,
+                ec_npu=ec_npu, ec_bmk=ec_bmk, ec_ratio=ec_ratio,
+                n_big=n_big, n_small=int(small.sum()))
+
+
+def ratio_verdict(m, out_dtype):
+    # 主判据 (§3.3); int 输出走 INT_EXACT/INT8_ATOL (bench_verdict 已判, 不进这里)
+    rs = []
+    if m["mare"] > L1["mare"]:
+        rs.append(f"MARE {m['mare']:.3g}>{L1['mare']:.0f}")
+    if m["mere"] > L1["mere"]:
+        rs.append(f"MERE {m['mere']:.3g}>{L1['mere']:.1f}")
+    if m["rmse"] > L1["rmse"]:
+        rs.append(f"RMSE {m['rmse']:.3g}>{L1['rmse']:.1f}")
+    if m["ec_ratio"] > L1["ec"]:
+        rs.append(f"EC_ratio {m['ec_ratio']:.3g}>{L1['ec']:.1f}")
+    return (len(rs) == 0), rs
+
+
 def _g4(x):
     return f"{x:.4g}"
 
@@ -682,6 +887,47 @@ def _fmt_verdict(m, out_dtype, passed, note_extra=""):
         line += "\n     最差元素: " + " ".join(parts)
     if note_extra:
         line += f"  {note_extra}"
+    return line
+
+
+def _consistency_tag(ok_main, ok_ref):
+    # §3.5 一致性标记: 主标准 vs 参考列
+    if ok_main and ok_ref:
+        return "一致PASS"
+    if not ok_main and not ok_ref:
+        return "一致FAIL"
+    if not ok_main and ok_ref:
+        return "分歧(标准更严)"
+    return "分歧(参考过紧)"
+
+
+def _fmt_verdict_dual(m, rm, out_dtype, ok, ok_ref, consist):
+    # C4: 双标杆打印 (主 ratio + 参考 bench + 一致性标记)
+    verd = "PASS" if ok else "FAIL"
+    # 主: ratio 三指标 + 余量百分比
+    std = STD_L1[out_dtype]
+    mare_pct = rm["mare"] / L1["mare"] * 100
+    mere_pct = rm["mere"] / L1["mere"] * 100
+    rmse_pct = rm["rmse"] / L1["rmse"] * 100
+    ec_pct = rm["ec_ratio"] / L1["ec"] * 100 if L1["ec"] else 0
+    main_line = (f"MARE {_g4(rm['mare_npu'])}/{_g4(rm['mare_bmk'])}=ratio {_g4(rm['mare'])} ({mare_pct:.0f}%/{L1['mare']:.0f}) "
+                 f"MERE {_g4(rm['mere_npu'])}/{_g4(rm['mere_bmk'])}=ratio {_g4(rm['mere'])} ({mere_pct:.0f}%/{L1['mere']:.1f}) "
+                 f"RMSE {_g4(rm['rmse_npu'])}/{_g4(rm['rmse_bmk'])}=ratio {_g4(rm['rmse'])} ({rmse_pct:.0f}%/{L1['rmse']:.1f}) "
+                 f"EC {rm['ec_npu']}/{max(rm['ec_bmk'],1)}=ratio {_g4(rm['ec_ratio'])} ({ec_pct:.0f}%) "
+                 f"[big={rm['n_big']} small={rm['n_small']}]")
+    # 参考: 合成地板 dbr + flat isclose err_small
+    ref_line = (f"参考 dbr_max={_g4(m['dbr_max'])}/{_g4(m['gate_max'])} dbr_avg={_g4(m['dbr_avg'])}/{_g4(m['gate_avg'])} "
+                f"err_small={m['err_small']}/{m['gate_small']:.0f} → {'PASS' if ok_ref else 'FAIL'}")
+    line = (f"  -> {verd}  |Δ|max={m['max_abs_diff']:.4g}  {main_line}\n"
+            f"     {ref_line}  [{consist}]  cos={m['cos']:.8f}(仅参考)")
+    # FAIL: Top-K worst + 特例建档模板 (§4.5)
+    if not ok and m.get("worst"):
+        parts = [f"(g={gv:.4g} npu={nv:.4g} bmk=? |Δ_npu|={ad:.3g})"
+                 for gv, nv, ad, rd in m["worst"][:3]]
+        line += "\n     最差元素: " + " ".join(parts)
+    if not ok and consist in ("分歧(标准更严)", "分歧(参考过紧)"):
+        line += (f"\n     特例候选: 主FAIL/参{'PASS' if ok_ref else 'FAIL'} "
+                 f"({consist}) — 进 CCB 建档流程")
     return line
 
 
@@ -788,6 +1034,7 @@ def run(c: Case, npu: bool, v: bool) -> dict:
     d = gen_data(c)
     try:
         g = golden_ref(d, c)
+        bmk = benchmark_ref(d, c)  # C1: CPU fp32 标杆 (int 输出返回 None)
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -796,7 +1043,7 @@ def run(c: Case, npu: bool, v: bool) -> dict:
     print(f"  golden: shape={tuple(g.shape)} dtype={g.dtype} "
           f"range=[{g_t.min():.4g}, {g_t.max():.4g}]")
     r = dict(name=c.name, g_ok=True, npu_ok=False, passed=None, m=None, max_diff=None,
-             cosine=None, note="")
+             cosine=None, note="", bmk=bmk)
     if not npu:
         return r  # golden-only: 不判 NPU
     if not _op_registered():
@@ -838,10 +1085,24 @@ def run(c: Case, npu: bool, v: bool) -> dict:
         r["passed"] = False
         return r
     m = bench_metrics(out.float().reshape(-1), g_t.reshape(-1), c.out_dtype)
-    ok, reasons = bench_verdict(m, c.out_dtype)
-    r.update(npu_ok=True, passed=ok, m=m, max_diff=m["max_abs_diff"], cosine=m["cos"],
-             note=("" if ok else "; ".join(reasons)))
-    print(_fmt_verdict(m, c.out_dtype, ok))
+    # C3: int 输出走 bench_verdict (INT_EXACT/INT8_ATOL, 无 benchmark); 浮点走 ratio_verdict (主) + bench_verdict (参考)
+    if c.out_dtype in INT_EXACT:
+        ok, reasons = bench_verdict(m, c.out_dtype)
+        r.update(npu_ok=True, passed=ok, m=m, max_diff=m["max_abs_diff"], cosine=m["cos"],
+                 note=("" if ok else "; ".join(reasons)))
+        print(_fmt_verdict(m, c.out_dtype, ok))
+        return r
+    # 浮点: 单标杆(bench_verdict 合成地板 10/2/2) 主判据 + 双标杆(ratio_verdict) 参考列
+    # custom op 无 GPU 等价物, benchmark(CPU numpy)≈golden 致 RMSE 偏严, 双标杆仅参考 (对齐框架 checkResultNew 单标杆)
+    rm = ratio_metrics(out.float().reshape(-1), g, bmk, c.out_dtype)
+    ok_ratio, reasons_ratio = ratio_verdict(rm, c.out_dtype)  # 参考: 双标杆 ratio
+    ok, reasons = bench_verdict(m, c.out_dtype)  # 主判据: 合成地板 dbr + flat isclose err_small
+    consist = _consistency_tag(ok, ok_ratio)  # 主(单标杆) vs 参考(双标杆)
+    r.update(npu_ok=True, passed=ok, m=m, rm=rm, max_diff=m["max_abs_diff"], cosine=m["cos"],
+             ok_ref=ok_ratio, consist=consist,
+             note=("" if ok else "; ".join(reasons)) +
+                   (f" | 双标杆{'PASS' if ok_ratio else 'FAIL'}({consist})" if (ok != ok_ratio) else ""))
+    print(_fmt_verdict_dual(m, rm, c.out_dtype, ok, ok_ratio, consist))
     return r
 
 
@@ -891,7 +1152,7 @@ def _print_summary(pairs):
     def _short_note(n):
         if not n: return ""
         if "未注册" in n: return "op未注册(wheel没装)"
-        return n[:32]
+        return n[:120]
 
     groups = {}
     for c, r in pairs:
