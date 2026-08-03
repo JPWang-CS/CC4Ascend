@@ -41,10 +41,20 @@ AscendC 算子开发工作区。
 
 以下情况可直接进入实现/诊断，不强行上方案流程：
 - 明确的局部 bugfix
-- 明确的编译/安装/调用链诊断
 - 已有方案且当前只是在执行其中一层
 
 但即使是小改动，也必须遵守验证纪律，不得靠“看起来对”收尾。
+
+### 2.2.1 代码框架必派 agent（硬规则）
+
+涉及**代码框架 / host 工程链**的工作，必须派 `ascendc-host-engineer`，主对话不直做落地改动：
+
+- build.sh / CMakeLists / `cmake/*.cmake` 等构建系统
+- op_def / proto / schema / registration
+- aclnn 调用通路（eager / graph）/ PyTorch binding
+- install / checker / stale package / 符号
+
+主对话可做快速 trace 定位问题层，但**落地修改一律走 agent**。“编译/安装/调用链诊断”不再享受 §2.2 主对话直做例外。
 
 ### 2.3 方案阶段的协作规则
 

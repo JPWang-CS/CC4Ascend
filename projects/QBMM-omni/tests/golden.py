@@ -212,7 +212,7 @@ def pack_int4_lastdim(code):
 @dataclass
 class Case:
     name: str
-    mode: str                  # pertensor|perchannel|pertoken|requant|int32|int4sym|a8w4|perblock
+    mode: str                  # pertensor|perchannel|pertoken|requant|int32|int4sym|a8w4|perblock|pergroup
     M: int
     N: int
     K: int
@@ -243,6 +243,10 @@ CASES: List[Case] = [
     Case("v3_requant_nd",         "requant",    128, 128, 256, out_dtype="int8",     enabled=True),
     Case("v3_int32_nd",           "int32",      128, 128, 256, out_dtype="int32",    enabled=True),
 
+    # ===== int4x4 对称 (int4sym: x1/x2 int32-packed int4, fp32 perchannel scale, T-C) =====
+    Case("v3_int4sym_nd", "int4sym", 16, 32, 64, out_dtype="float16", enabled=True),
+    Case("v3_int4sym_nz", "int4sym", 16, 32, 64, out_dtype="float16", weight_nz=True, enabled=True),
+
     # ===== out_dtype 变体 (perchannel 可出 int8/int32; pertoken fp16) =====
     Case("v3_perchannel_int8_nd",  "perchannel", 128, 128, 256, out_dtype="int8",   enabled=True),
     Case("v3_perchannel_int32_nd", "perchannel", 128, 128, 256, out_dtype="int32",  enabled=True),
@@ -250,8 +254,8 @@ CASES: List[Case] = [
     Case("v3_pertensor_int8_nd",   "pertensor",  128, 128, 256, out_dtype="int8",   enabled=True),
 
     # ===== bias (float32 after-scale / int32 before-scale) =====
-    # ⚠ fbias disabled: perchannel+fp32 scale → trans_quant_param 转 int64(static T-C) → EZ0020 要求 bias=INT32, float32 无效
-    Case("v3_perchannel_fbias_nd", "perchannel", 128, 128, 256, out_dtype="float16", has_bias=True, bias_dtype="float32", enabled=False),
+    # fbias: out=BF16 + scale=FLOAT 时 bias 允许 FLOAT32 (aclnn V5 doc L681); fp16 out 触发 EZ0020 故用 bf16
+    Case("v3_perchannel_fbias_nd", "perchannel", 128, 128, 256, out_dtype="bfloat16", has_bias=True, bias_dtype="float32", enabled=True),
     Case("v3_perchannel_ibias_nd", "perchannel", 128, 128, 256, out_dtype="float16", has_bias=True, bias_dtype="int32",   enabled=True),
     Case("v3_int32_ibias_nd",      "int32",      128, 128, 256, out_dtype="int32",   has_bias=True, bias_dtype="int32",   enabled=True),
 
@@ -306,24 +310,45 @@ CASES: List[Case] = [
     Case("ext_pertoken_ibias_nd",   "pertoken",   128, 128, 256, out_dtype="bfloat16", has_bias=True, bias_dtype="int32", enabled=True),
     Case("ext_perchannel_stat_ibias_nd","perchannel",128,128, 256, out_dtype="float16", scale_dtype="int64", has_bias=True, bias_dtype="int32", enabled=True),
 
+    # ===== A8W4-int perchannel (x1 INT8 × x2 INT32(N-packed int4) + FP32 x1Scale + UINT64 x2Scale + FP32 yOffset → FP16) =====
+    # 走 V5 ND 入口 (aclnnAiInfraQuantMatmulV5): binding npu_ai_infra_quant_matmul.cpp:250 `!is_nz_format(x2)`
+    #   恒 true (weight_nz=False) → V5 ND; 路由纯看 format 不看 dtype。
+    # V5 a8w4-int 约束 (aclnn_quant_matmul_v5.cpp): isA8W4Int 放行 yOffset(:277); yOffset 必非空(:528);
+    #   bias/yScale 必 null(:524); x1Scale=FLOAT(:63) [M] 1D; x2Scale=UINT64(:64) [N] 1D, INT64→UINT64 cast(:532-534);
+    #   yOffset=FLOAT(:65) [N] 1D; groupSize=0(perchannel, :180); K%2==0(:711 SUPPORTED_K_ALIGN_NUM_INT4=2);
+    #   仅 910B/910_93(DAV_2201, :744)。gen_data a8w4(:405) 已是 perchannel 布局 → 不改 gen/call。
+    Case("v3_a8w4int_nd",           "a8w4",    128, 128, 256, out_dtype="float16", enabled=True),
+
     # ===== 占位: ops-nn 有但当前测不了的 WeightNz case =====
     # int4×int4 perchannel NZ (ops-nn a4w4_case_01~12): binding npu_ai_infra_quant_matmul.cpp:228 `!is_a4w4` 条件
     #   把 int4 NZ 路由到 V5 (非 WeightNz); V5 没迁 → 测不了。要测需改 binding 条件或迁 V5。
-    # A8W4-int NZ (ops-nn a8w4_case_1~5: int8×int32 + FLOAT x1Scale + UINT64 x2Scale + FLOAT yOffset → FP16):
-    #   binding 走 WeightNz (is_a4w4=false ✓), 但 oracle 需扩 int4 打包反解 + yOffset 语义, 待实现。
-    # ⚠ A8W4-int disabled: EH0012 "Current version do not support yOffset" — A8W4-int 用 yOffset, 当前版本不支持
+    # ⚠ A8W4-int NZ disabled: WeightNz 入口 isA8W4Msd (aclnn_v4.cpp:1989) 在 ProcessScaleTensor cast
+    #   (:1640/:1833, INT64→UINT64) 之前校验 scale==DT_UINT64 (quant_matmul_v4_common.h:144);
+    #   binding 传 scale=INT64 → isA8W4Msd 返 false → yOffset 被 :1989 拒。
+    #   A2A3 MSD 本身支持 yOffset (非 EH0012 版本限制), 缺的是 cast 时序。走 V5 ND 入口替代 (见 v3_a8w4int_nd)。
     Case("v3_a8w4int_nz",         "a8w4",    128, 128, 256, out_dtype="float16", weight_nz=True, enabled=False),
 
     # ===== V4 核: G-B perblock (int8×int8 + FP32 block scales, groupSize=[1,128,128]; V5→l0op::V4) =====
-    # aclnn V5 G-B 约束(line 662-663): k 须 4*128=512 倍数, n 须 256 倍数, transposeX2=true; out=BFLOAT16
-    # ===== V4 核: G-B perblock (int8×int8 + FP32 block scales, groupSize=[1,128,128]; V5→l0op::V4) =====
-    # aclnn V5 G-B 约束(line 662-663): k 须 4*128=512 倍数, n 须 256 倍数, transposeX2=true, out=BFLOAT16
-    # K=N=512: 满足约束 + mask checker EZ0027 (GetTransposeAttrValue swap+flip, M≠K 时 K 维读错)
     # aclnn V5 G-B 约束(line 651-663): k=4*128倍数, n=256倍数, transposeX2=true, bias=FLOAT32(必选), out=BFLOAT16
+    # groupSizeM 硬定死=1 (perblock_tiling.cpp:91 + doc L659); x1Scale shape=[M,ceil(K/128)] 与 M 无关 (非 M/gM)
+    # K=N=512: 满足约束 + mask checker EZ0027 (GetTransposeAttrValue swap+flip, M≠K 时 K 维读错)
     Case("v4_perblock_gb_nd",  "perblock", 128, 512, 512, out_dtype="bfloat16",
          trans_x2=True, group_sizes=[1, 128, 128], has_bias=True, bias_dtype="float32", enabled=True),
+    # B3 泛化: 非方阵 (oracle trans_x2 swap bug 修后通); gM=1 (gM=128 不合法见上)
+    Case("v4_perblock_gb_nd_m32",   "perblock", 32,  256, 512,  out_dtype="bfloat16",
+         trans_x2=True, group_sizes=[1, 128, 128], has_bias=True, bias_dtype="float32", enabled=True),
+    Case("v4_perblock_gb_nd_m256",  "perblock", 256, 256, 512,  out_dtype="bfloat16",
+         trans_x2=True, group_sizes=[1, 128, 128], has_bias=True, bias_dtype="float32", enabled=True),
+    Case("v4_perblock_gb_nd_bigk",  "perblock", 128, 256, 1024, out_dtype="bfloat16",
+         trans_x2=True, group_sizes=[1, 128, 128], has_bias=True, bias_dtype="float32", enabled=True),
 
-    # ===== batch (numpy 式右对齐广播; 单层 2) — ⚠ A2A3 V5 仅支持 1~2D, batch(3D+) 非 A2A3, 禁 =====
+    # ===== V4 核: K-G int4×int4 pergroup 非对称 (x1/x2 INT4 + FP32 scale + FP16 x2Offset; V5→l0op::V4 pergroup) =====
+    # aclnn V5 K-G 约束(L730-738): K%1024==0, N%256==0, trans_x2=true, x2Scale/x2Offset=[⌈K/256⌉,N], bias=null, out=BF16
+    # groupSize=[0,0,256] (gsK=256 硬编码 pergroup_tiling.cpp:193)
+    Case("v4_int4_pergroup_kg_nd", "pergroup", 128, 256, 1024, out_dtype="bfloat16",
+         trans_x2=True, group_sizes=[0, 0, 256], enabled=True),
+
+    # ===== batch (numpy 式右对齐广播; 单层 2) — A2A3 scope-out: V5 CheckNormalScaleDimRange 拦 pertoken batch(x1Scale 须 1D, quant_matmul_checker.cpp:1092); >2D 是 950-only (aclnnQuantMatmulV5.md L24) =====
     Case("v3_perchannel_b2_nd",  "perchannel", 128, 128, 256, out_dtype="float16", batch=[2], enabled=False),
     Case("v3_pertoken_b2_nd",    "pertoken",   128, 128, 256, out_dtype="bfloat16", batch=[2], enabled=False),
 ]
@@ -418,6 +443,30 @@ def gen_data(c: Case) -> dict:
         d["scale_dtype_str"] = "float32"
         d["offset"] = None
         d["bias"] = (rng.standard_normal(B + (N,)) * 0.05).astype(np.float32)
+
+    elif c.mode == "pergroup":
+        # K-G int4×int4 非对称: x1/x2 INT4(logical int8 + int32 packed) + FP32 scale + FP16 x2Offset
+        #   groupSizeK=256 硬编码 (pergroup_tiling.cpp:193); K%1024==0, N%256==0 (pergroup_tiling.cpp:379-382)
+        #   x1Scale(pertoken_scale)=fp32[M,1], x2Scale(scale)=fp32[⌈K/256⌉,N], x2Offset(offset)=fp16[⌈K/256⌉,N]
+        #   bias=null (pergroup_tiling.cpp:362); trans_x2=true 强制 (checker), x2 物理 packed 沿 K: [N,K/8]
+        PERGROUP_GSK = 256
+        PERGROUP_K_ALIGN = 1024
+        PERGROUP_N_ALIGN = 256
+        assert K % PERGROUP_K_ALIGN == 0, f"pergroup K%{PERGROUP_K_ALIGN}==0 (pergroup_tiling 硬校验), got K={K}"
+        assert N % PERGROUP_N_ALIGN == 0, f"pergroup N%{PERGROUP_N_ALIGN}==0 (pergroup_tiling 硬校验), got N={N}"
+        x1 = rng.integers(-7, 8, B + (M, K), dtype=np.int8)
+        x2 = rng.integers(-7, 8, B + (K, N), dtype=np.int8)
+        d["x1"], d["x2"] = x1, x2
+        d["x1_packed"] = pack_int4_lastdim(x1)                      # [M,K/8] int32 沿 K 打包
+        d["x2_packed"] = pack_int4_lastdim(np.swapaxes(x2, -1, -2))  # [N,K/8] int32 (x2.T 沿 K 打包)
+        d["x1_dtype"], d["x2_dtype"] = "int4", "int4"
+        n_kt = (K + PERGROUP_GSK - 1) // PERGROUP_GSK
+        d["pertoken_scale"] = (rng.standard_normal(B + (M, 1)) * 0.05).astype(np.float32)
+        d["scale"] = (rng.standard_normal(B + (n_kt, N)) * 0.05).astype(np.float32)
+        d["scale_dtype_str"] = "float32"
+        d["offset"] = (rng.standard_normal(B + (n_kt, N)) * 0.05).astype(np.float16)
+        d["offset_dtype_str"] = "float16"
+        d["bias"] = None
     else:
         raise ValueError(f"unknown mode {c.mode}")
     return d
@@ -431,6 +480,13 @@ def golden_ref(d: dict, c: Case) -> np.ndarray:
     # int8/int4 → int32 精确累加 (对齐 ops-nn: x1.astype(int32) × x2.astype(int32))
     x1 = d["x1"].astype(np.int32) if x1dt in ("int8", "int4") else d["x1"].astype(np.float32)
     x2 = d["x2"].astype(np.int32) if x2dt in ("int8", "int4") else d["x2"].astype(np.float32)
+    # perblock/pergroup 自带 K-tile 循环, 重读 d[] 不走外层预计算 mm (避免非方阵 trans_x2 时 swap 后 matmul 维度不符)
+    if c.mode in ("perblock", "pergroup"):
+        ydt = c.out_dtype
+        if c.mode == "perblock":
+            return _compute_perblock_gb(d, c, ydt)
+        return _compute_pergroup_kg(d, c, ydt)
+
     # oracle 须对转置 case 先 swap x1/x2 再 matmul (照 ops-nn golden:95-98; op 拿到转置 input + transposeX flag 后算的是转置 matmul)
     if c.trans_x1:
         x1 = np.swapaxes(x1, -1, -2)
@@ -472,31 +528,58 @@ def golden_ref(d: dict, c: Case) -> np.ndarray:
         while yoff.ndim < mm.ndim:
             yoff = np.expand_dims(yoff, -2)
         return _cast_output(mm.astype(np.float32) * sc_f * x1s + yoff, ydt)
-    if c.mode == "perblock":
-        # G-B perblock: per-tile K matmul × (x1Scale[M,1] × x2Scale[1,N]) 累加; 忠实移植 ops-nn _compute_per_tile_int8 (2D)
-        # 转置须 swap x1/x2 + scale (照 ops-nn _compute_per_tile_int8:345-354)
-        gM, gN, gK = c.group_sizes if c.group_sizes else (1, 128, 128)
-        x1f = d["x1"].astype(np.float32)
-        x2f = d["x2"].astype(np.float32)
-        x1sf = d["pertoken_scale"].astype(np.float32)
-        x2sf = d["scale"].astype(np.float32)
-        if c.trans_x1:
-            x1f = np.swapaxes(x1f, -1, -2)
-            x1sf = np.swapaxes(x1sf, -1, -2)
-        if c.trans_x2:
-            x2f = np.swapaxes(x2f, -1, -2)
-            x2sf = np.swapaxes(x2sf, -1, -2)
-        m = x1f.shape[-2]; k = x1f.shape[-1]; n = x2f.shape[-1]
-        x2sf_kn = np.repeat(x2sf, gN, axis=-1)[..., :n]
-        out = np.zeros(x1f.shape[:-2] + (m, n), dtype=np.float32)
-        for kt in range((k + gK - 1) // gK):
-            ks = kt * gK; ke = min(ks + gK, k)
-            tile_sc = x1sf[..., kt:kt + 1] * x2sf_kn[..., kt:kt + 1, :]
-            out = out + np.matmul(x1f[..., ks:ke], x2f[..., ks:ke, :]) * tile_sc
-        if d["bias"] is not None:
-            out = out + d["bias"].astype(np.float32)
-        return _cast_output(out, ydt)
     raise ValueError(f"unknown mode {c.mode}")
+
+
+# ============================================================
+# perblock (G-B) / pergroup (K-G) oracle — 自带 K-tile 循环, 独立函数 (避开外层预计算 mm)
+# ============================================================
+def _compute_perblock_gb(d, c, ydt):
+    # G-B perblock: per-tile K matmul × (x1Scale[M,1] × x2Scale[1,N]) 累加; 忠实移植 ops-nn _compute_per_tile_int8 (2D)
+    # 本项目 gen_data 存逻辑布局 (x2=[K,N], scale=[K//gK,N//gN]); call_npu 仅在喂 NPU 前 transpose。
+    # 故 oracle 读 d[] 已是逻辑布局, 不swap (照 ops-nn host 约定 swap 是残留, 非方阵时崩)。
+    # trans_x1 swap 保留 (perblock 恒 trans_x1=False, 无害; 逻辑布局若 trans_x1=True 仍需 swap x1)。
+    gM, gN, gK = c.group_sizes if c.group_sizes else (1, 128, 128)
+    x1f = d["x1"].astype(np.float32)
+    x2f = d["x2"].astype(np.float32)
+    x1sf = d["pertoken_scale"].astype(np.float32)
+    x2sf = d["scale"].astype(np.float32)
+    if c.trans_x1:
+        x1f = np.swapaxes(x1f, -1, -2)
+        x1sf = np.swapaxes(x1sf, -1, -2)
+    m = x1f.shape[-2]; k = x1f.shape[-1]; n = x2f.shape[-1]
+    x2sf_kn = np.repeat(x2sf, gN, axis=-1)[..., :n]
+    out = np.zeros(x1f.shape[:-2] + (m, n), dtype=np.float32)
+    for kt in range((k + gK - 1) // gK):
+        ks = kt * gK; ke = min(ks + gK, k)
+        tile_sc = x1sf[..., kt:kt + 1] * x2sf_kn[..., kt:kt + 1, :]
+        out = out + np.matmul(x1f[..., ks:ke], x2f[..., ks:ke, :]) * tile_sc
+    if d["bias"] is not None:
+        out = out + d["bias"].astype(np.float32)
+    return _cast_output(out, ydt)
+
+
+def _compute_pergroup_kg(d, c, ydt):
+    # K-G int4×int4 非对称 (kernel pergroup.h:296-398 公式):
+    #   每 K-tile(gK=256): acc += (mm_t - rowsum_t × x2Offset[t]) × x2Scale[t]
+    #   最后: out = acc × x1Scale (后乘, Brcb 到 [M,1])
+    #   mm_t = int32 精确累加→fp32; rowsum_t = x1 K-tile 行和 (x1 int4→fp16→fp32 无损, 直接 fp32)
+    #   x2Offset=fp16→fp32 (kernel Cast half→float); 无 swap (逻辑算 x1@x2)
+    PERGROUP_GSK = 256
+    x1f = d["x1"].astype(np.float32)
+    x2f = d["x2"].astype(np.float32)
+    x1sf = d["pertoken_scale"].astype(np.float32)
+    x2sf = d["scale"].astype(np.float32)
+    x2off = d["offset"].astype(np.float32)
+    m = x1f.shape[-2]; k = x1f.shape[-1]; n = x2f.shape[-1]
+    acc = np.zeros(x1f.shape[:-2] + (m, n), dtype=np.float32)
+    for kt in range((k + PERGROUP_GSK - 1) // PERGROUP_GSK):
+        ks = kt * PERGROUP_GSK; ke = min(ks + PERGROUP_GSK, k)
+        mm_t = np.matmul(x1f[..., ks:ke], x2f[..., ks:ke, :])
+        rs_t = np.sum(x1f[..., ks:ke], axis=-1)
+        acc = acc + (mm_t - rs_t[..., None] * x2off[..., kt, :]) * x2sf[..., kt, :]
+    acc = acc * x1sf
+    return _cast_output(acc, ydt)
 
 
 # ============================================================
@@ -531,6 +614,47 @@ def benchmark_ref(d: dict, c: Case):
         return None
 
     x1dt, x2dt = d["x1_dtype"], d["x2_dtype"]
+    # perblock/pergroup: gen_data 存逻辑布局 d["x2"]=[K,N], call_npu 喂 NPU 前才 transpose;
+    #   oracle 用逻辑布局算 (照 golden_ref 提前分派), 不走外层 swap+matmul (非方阵时 [N,K] 维度不符)。
+    if c.mode in ("perblock", "pergroup"):
+        sc = d["scale"].astype(np.float32)
+        bdtype = d["bias_dtype"]
+        ydt = c.out_dtype
+        if c.mode == "perblock":
+            gM, gN, gK = c.group_sizes if c.group_sizes else (1, 128, 128)
+            x1f = d["x1"].astype(np.float32)
+            x2f = d["x2"].astype(np.float32)
+            x1sf = d["pertoken_scale"].astype(np.float32)
+            x2sf = sc
+            if c.trans_x1:
+                x1f = np.swapaxes(x1f, -1, -2)
+                x1sf = np.swapaxes(x1sf, -1, -2)
+            m = x1f.shape[-2]; k = x1f.shape[-1]; n = x2f.shape[-1]
+            x2sf_kn = np.repeat(x2sf, gN, axis=-1)[..., :n]
+            out = np.zeros(x1f.shape[:-2] + (m, n), dtype=np.float32)
+            for kt in range((k + gK - 1) // gK):
+                ks = kt * gK; ke = min(ks + gK, k)
+                tile_sc = x1sf[..., kt:kt + 1] * x2sf_kn[..., kt:kt + 1, :]
+                out = out + np.matmul(x1f[..., ks:ke], x2f[..., ks:ke, :]) * tile_sc
+            if d["bias"] is not None:
+                out = out + d["bias"].astype(np.float32)
+            return _cast_output_bmk(out, ydt)
+        PERGROUP_GSK = 256
+        x1f = d["x1"].astype(np.float32)
+        x2f = d["x2"].astype(np.float32)
+        x1sf = d["pertoken_scale"].astype(np.float32)
+        x2sf = sc
+        x2off = d["offset"].astype(np.float32)
+        m = x1f.shape[-2]; k = x1f.shape[-1]; n = x2f.shape[-1]
+        acc = np.zeros(x1f.shape[:-2] + (m, n), dtype=np.float32)
+        for kt in range((k + PERGROUP_GSK - 1) // PERGROUP_GSK):
+            ks = kt * PERGROUP_GSK; ke = min(ks + PERGROUP_GSK, k)
+            mm_t = np.matmul(x1f[..., ks:ke], x2f[..., ks:ke, :])
+            rs_t = np.sum(x1f[..., ks:ke], axis=-1)
+            acc = acc + (mm_t - rs_t[..., None] * x2off[..., kt, :]) * x2sf[..., kt, :]
+        acc = acc * x1sf
+        return _cast_output_bmk(acc, ydt)
+
     # int8/int4 → fp32 精确整数; 再 fp32 matmul (A1 已验证 = NPU int32 L0C 累加)
     x1 = d["x1"].astype(np.float32) if x1dt in ("int8", "int4") else d["x1"].astype(np.float32)
     x2 = d["x2"].astype(np.float32) if x2dt in ("int8", "int4") else d["x2"].astype(np.float32)
@@ -590,30 +714,6 @@ def benchmark_ref(d: dict, c: Case):
         out = mm * sc_f * x1s + yoff
         return _cast_output_bmk(out, ydt)
 
-    # ---- perblock (G-B): per-tile 累加, 同 golden_ref 结构 (fp32 域) ----
-    if c.mode == "perblock":
-        gM, gN, gK = c.group_sizes if c.group_sizes else (1, 128, 128)
-        x1f = d["x1"].astype(np.float32)
-        x2f = d["x2"].astype(np.float32)
-        x1sf = d["pertoken_scale"].astype(np.float32)
-        x2sf = d["scale"].astype(np.float32)
-        if c.trans_x1:
-            x1f = np.swapaxes(x1f, -1, -2)
-            x1sf = np.swapaxes(x1sf, -1, -2)
-        if c.trans_x2:
-            x2f = np.swapaxes(x2f, -1, -2)
-            x2sf = np.swapaxes(x2sf, -1, -2)
-        m = x1f.shape[-2]; k = x1f.shape[-1]; n = x2f.shape[-1]
-        x2sf_kn = np.repeat(x2sf, gN, axis=-1)[..., :n]
-        out = np.zeros(x1f.shape[:-2] + (m, n), dtype=np.float32)
-        for kt in range((k + gK - 1) // gK):
-            ks = kt * gK; ke = min(ks + gK, k)
-            tile_sc = x1sf[..., kt:kt + 1] * x2sf_kn[..., kt:kt + 1, :]
-            out = out + np.matmul(x1f[..., ks:ke], x2f[..., ks:ke, :]) * tile_sc
-        if d["bias"] is not None:
-            out = out + d["bias"].astype(np.float32)
-        return _cast_output_bmk(out, ydt)
-
     raise ValueError(f"benchmark_ref unknown mode {c.mode}")
 
 
@@ -632,8 +732,11 @@ def _np_to_npu(arr, dtype=None):
 
 
 def call_npu(d: dict, c: Case) -> torch.Tensor:
-    # x1/x2: int4sym 用 int32 packed; a8w4 用 x1 int8 + x2 int32(N-packed); 其余 int8 logical
+    # x1/x2: int4sym/pergroup 用 int32 packed; a8w4 用 x1 int8 + x2 int32(N-packed); 其余 int8 logical
     if c.mode == "int4sym":
+        x1 = _np_to_npu(d["x1_packed"])
+        x2 = _np_to_npu(d["x2_packed"])
+    elif c.mode == "pergroup":
         x1 = _np_to_npu(d["x1_packed"])
         x2 = _np_to_npu(d["x2_packed"])
     elif c.mode == "a8w4":
@@ -660,11 +763,15 @@ def call_npu(d: dict, c: Case) -> torch.Tensor:
         kw["scale"] = _np_to_npu(d["scale"], dtype=torch.bfloat16)
     else:
         kw["scale"] = _np_to_npu(d["scale"])
-    # perblock(G-B): x2Scale 是 2D, trans_x2 时须同步转置 (binding is_x_scale_same_transpose 校验 x2↔scale 一致)
+    # perblock(G-B)/pergroup(K-G): x2Scale 2D, trans_x2 时须同步转置 (binding is_x_scale_same_transpose 校验 x2↔scale 一致)
     if c.trans_x2 and kw["scale"].dim() >= 2:
         kw["scale"] = kw["scale"].transpose(-1, -2)
     if d["offset"] is not None:
-        kw["offset"] = _np_to_npu(d["offset"])
+        off_dt = torch.float16 if d.get("offset_dtype_str") == "float16" else None
+        kw["offset"] = _np_to_npu(d["offset"], dtype=off_dt)
+        # pergroup x2Offset 2D, trans_x2 时照 scale 同步转置 (aclnn V5 PreMatmulCalcProcess 会 contiguous 化)
+        if c.trans_x2 and kw["offset"].dim() >= 2:
+            kw["offset"] = kw["offset"].transpose(-1, -2)
     if d["pertoken_scale"] is not None:
         kw["pertoken_scale"] = _np_to_npu(d["pertoken_scale"])
     if d["bias"] is not None:
@@ -1133,11 +1240,11 @@ def _print_summary(pairs):
     _MD = {"pertensor": "pertensor(T-C)", "perchannel": "perchannel(T-T)",
            "pertoken": "pertoken(K-C)", "requant": "requant(int8)",
            "int32": "int32out", "int4sym": "int4x4对称", "a8w4": "A8W4-int(MSD)",
-           "perblock": "G-B perblock"}
+           "perblock": "G-B perblock", "pergroup": "K-G int4非对称"}
 
     def _group(c):
         return ("WeightNz·NZ" if c.weight_nz else "V5·ND") + " │ " + \
-               ("V4核" if c.mode in ("a8w4", "perblock") else "V3核")
+               ("V4核" if c.mode in ("a8w4", "perblock", "pergroup") else "V3核")
 
     def _variant(c):
         v = [_MD.get(c.mode, c.mode)]

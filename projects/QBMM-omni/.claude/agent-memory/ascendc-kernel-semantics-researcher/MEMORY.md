@@ -1,0 +1,3 @@
+- [QBMM K-G int4 pergroup 语义](qbmm-pergroup-int4-kg-semantics.md) — 公式源是 kernel pergroup.h 非 ops-nn golden; offset 减性; int4 打包 trans_x2 时沿 K; transpose 照 perblock
+- [QBMM perblock trans_x2 oracle swap bug](qbmm-perblock-transx2-oracle-swap-bug.md) — 已修(2026-07-30 删两处 swap); 语义:gen_data 存逻辑布局 call_npu 才转置故 oracle 不 swap; 方阵单例非 no-op 是数值错(shape 对称掩盖); gM 硬=1
+- [QBMM a8w4-int NZ cast 时序真因](qbmm-a8w4int-nz-cast-timing.md) — NZ 走不通非"缺 cast"而是 isA8W4Msd 在 ProcessScaleTensor cast 前校验 UINT64; a8w4-int 必须走 V5 ND(cast 在 dtype 检查前); golden 已加 v3_a8w4int_nd

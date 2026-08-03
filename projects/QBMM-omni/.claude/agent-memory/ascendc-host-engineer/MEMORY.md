@@ -1,0 +1,9 @@
+# Host Engineer Memory Index
+
+- [QBMM-omni V4 binary 编译驱动(三次定论)](qbmm-omni-v4-binary-compile-driver.md) — 根因=build体系非源码:nn --pkg 由 binary.json(明文,含int4)驱动编7个;omni -n -c 由 ops-info.ini(config_910BC切片,INT8-only)驱动只编6个漏int4/perblock;源码全等价;修法=给omni补binary.json驱动路径(对齐nn)
+- [binary.json cmake target≠build驱动(孤岛根因)](binary-json-cmake-target-vs-build-driver.md) — compile_binary_from_json 的 target 是孤岛不在 ops_kernel 链;OPC_NUM configure 时未定故不能单挂 ops_kernel;正确驱动=build.sh 三步(prepare/re-configure/binary/gen_bin_info_config), 对齐 nn build.sh:1203-1234; 已落地 omni build.sh
+- [QBMM-omni a8w4/pergroup EZ1009 旧推断【全文作废】](qbmm-omni-a8w4-pergroup-ez1009-real-cause.md) — 旧断言"config不卡/binary编了/nn也走ini/改config伪修"全错;以 v4-binary-compile-driver 三次定论为准
+- [build.sh VERBOSE make 误用 bug](build-sh-verbose-make-bug.md) — build_binary_from_json 三处 ${VERBOSE:+--verbose} 在--后传给 make 但 make 无此选项, 且 :+ 测试对 omni 的 VERBOSE="false" 字符串 always-on; 已删, 想调试用 cmake 的 --verbose(在 -- 前)
+- [cmake include vs set 顺序 bug](cmake-include-order-vs-set-order.md) — `/scripts/util/...` 路径空根因=CMakeLists:24 include(variables.cmake) 早于 :56 set(OPS_TRANSFORMER_DIR); REALPATH 不报错保留 /scripts/util; 之前"binary_script正常/util坏"是误判, 39/40/41 全坏只是 util 先暴露; 修=set 上移到 include 之前(对齐上游)
+- [dynamic py asc_op_compile_base 根因](dynamic-py-asc-op-compile-base-rootcause.md) — opc 编 INT4 shape -2 被 E80002 拒=omni 用 CANN 包旧 ascendc_impl_build.py(生成 tbe.common 严格 para_check); nn 用仓内新版(生成 asc_op_compile_base 宽松); asc_op_compile_base 是远端 CANN 自带库非仓内文件; 修=搬 nn py 到 omni scripts/util + CMakeLists:651 改指 OPS_KERNEL_UTIL_SCRIPT
+- [dynamic py compile_op src 空+路径错(第九关)](dynamic-py-kernel-src-empty-and-path.md) — 文件名空(.cpp)+路径build/tbe/ascendc/<op>/错=omni 缺 insert_kernel_src.py 注入 kernelSrc.value + 缺 kernel src 拷到 build/tbe/ascendc/; nn 在 opbuild.cmake:46-51 + gen_ops_info.cmake:523-528 补这俩; 修=搬 insert_kernel_src.py + func.cmake 加 get_op_type_from_op_name + CMakeLists generate_adapt_py 前加 insert_kernel_src target(拷kernel+注入三层ini)

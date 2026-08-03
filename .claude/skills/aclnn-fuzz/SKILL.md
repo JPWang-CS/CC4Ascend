@@ -99,28 +99,100 @@ def _calc_ratio(x, y):  # x=NPU_err, y=GPU_err
 - **路径 A method 0/1**：`op_report.json`（按算子名）或 `aclnn_op_dtype.json`（按 dtype，优先级高）
 - 配完跑 `script/update_precision_threshold.py -d <op>` 更新 cs（cs 优先级 > ini）
 
-## 工作流
+## 工作流（正确命令，照官方攻略）
+
+### 分离式（推荐调试用）
+
+```bash
+# 1. 生成用例 (.cs/.json) — 用 script/aclnn_create_json_new.py, 不是 xrunfk.py create!
+python script/aclnn_create_json_new.py --op_name=<op> --case_file=excel/<op>.xlsx --sheet_name=<sheet> --use_bin=false --run_type=aclnn
+
+# 2. 生成 golden (CPU) — xrunfk.py bm <op> <case_name> (case_name 是 excel 里的具体用例名, 不是 all)
+python3 xrunfk.py bm <op> <case_name>
+
+# 3. NPU 执行 — xrunfk.py npu/npu_off <op> <case_name>
+python3 xrunfk.py npu <op> <case_name>
+
+# 4. 精度比对 — xrunfk.py compare <op> <case_name>
+python3 xrunfk.py compare <op> <case_name>
+```
+
+### 归一化（一步到位）
+
+```bash
+bash run.sh --op_name=<op> --case_file=excel/<op>.xlsx --sheet_name=<sheet> \
+  --exec_mode=npu --framework=aclnn --graphy_path=0 \
+  --use_bin=false --bm=bm --ti=<start>-<end>
+```
+
+`--use_bin=true` + 删 `--bm=bm` = 复用已生成 golden 不重跑。
+
+### 代码路径模拟
 
 ```
-python3 xrunfk.py create aclnnMatmul all           # 生成用例
-python3 xrunfk.py bm_output_gold aclnnMatmul all   # CPU golden（路径 A）
-python3 xrunfk.py bm aclnnMatmul all               # 跑 bm
-# 路径 A（单标杆）: xrunfk 正常跑 → checkResultNew 比对
-# 路径 B（双标杆）: python3 auto_new_precision_mm.py --op aclnnMatmul --precision_mode benchmark
-#                  （自动 NPU+GPU+golden+ratio 统计，需 GPU 服务器）
+1. aclnn_create_json_new.py
+   读 excel/<op>.xlsx (sheet_name 页签) → 生成 testcase/aclnn_case/<op>/*.cs + *.json
+   .cs = case spec (shape/dtype/range/attr/threshold)
+   .json = case config (input details + bin_path)
+
+2. xrunfk.py bm <op> <case_name>
+   读 .cs/.json → 生成 input .bin 文件 → 调 opp/<op>.py::aclnn_op_func(action_type='bm')
+   → aclnn_op_func CPU 分支 (torch.matmul + golden) → 存 golden output bin
+
+3. xrunfk.py npu <op> <case_name>
+   读 .cs/.json + input bin → 调 opp/<op>.py::aclnn_op_func(action_type='npu')
+   → aclnn_op_func NPU 分支 (torch.ops.custom.* 或 l0op::*) → 存 NPU output bin
+
+4. xrunfk.py compare <op> <case_name>
+   读 golden bin + NPU bin → libs/tools.py checkResult/checkResultNew → 精度判定
 ```
 
-## 何时用本 skill
+### xlsx 要求
 
-- 查官方双标杆**实际怎么跑**（auto_new_precision NPU-VS-GPU ratio）→ 本 skill
-- 查单标杆合成地板实现（checkResultNew）→ 本 skill
-- 怎么配精度阈值 / 加 aclnn 测试用例 → 本 skill + README 七节
-- 写 project golden 对齐官方 → 本 skill + ascendc-golden-testing
-- 标准理论文档（L0/L1/L2、复检）→ ascendc-golden-testing/criteria.md
+- 放在 `excel/` 文件夹内
+- sheet 名 = `--sheet_name` 参数值 (如 `level0`)
+- 列格式照 Design File 规范 (README section 二)
+
+## 新增算子 fuzz 适配步骤（照 AiInfraMatmul 模板）
+
+1. **`opp/aclnn_op/<op_name>.py`**：golden + NPU 调用。顶层 `import omni_custom_ops`（裸 import，wheel 必须装好，跟 matmul 一致，不加 try/except）。`aclnn_op_func` 分三路：npu=`torch.ops.custom.*`、gpu=golden 搬 GPU、cpu=golden
+2. **`opp/aclnn_op/__init__.py`**：追加 `try: import opp.aclnn_op.<op_name> except: pass`
+3. **`excel/<op_name>.xlsx`**：用例配置（照 QuantMatmulV5 / AiInfraMatmul 抄）。**sheet 名必须是 `level0`**（不是默认 `Sheet`）。列要全（68 列含 attr_name/attr_type/attr_dtype/attr_value）。放 `excel/` 文件夹
+4. **`bm_cmp_std.json` 不改**：框架对未配置算子自动用默认阈值（10/2/2）。加条目是冗余
+5. **`pip install tabulate`**：框架依赖，不装会 warning
+
+## 踩坑总结
+
+| 坑 | 现象 | 正解 |
+|---|---|---|
+| **生成用例用错命令** | `xrunfk.py create` 只出 design2_ xlsx，不出 .cs/.json → `bm_output_gold` 报 "no case" | 用 `script/aclnn_create_json_new.py --op_name=... --case_file=excel/xxx.xlsx --sheet_name=level0 --run_type=aclnn` |
+| **xlsx sheet 名错** | sheet 叫 `Sheet`（默认）→ 框架认不到用例 | sheet 名改成 `level0`（跟 AiInfraMatmul 一致） |
+| **手写 .cs/.json** | 格式不对，框架读不了 | 不要手写，让 `aclnn_create_json_new.py` 从 xlsx 自动生成 |
+| **改了 bm_cmp_std.json** | 加了冗余条目（默认就是 10/2/2） | 不改，框架对未配置算子自动用默认 |
+| **import omni_custom_ops 报错** | 模块加载失败，`__init__.py` try/except 静默吞 | 确认 wheel 装好（`pip install` torch_ops_extension wheel） |
+| **`bm_output_gold` 直接跑** | "no case"（还没生成 .cs/.json） | 先跑 `aclnn_create_json_new.py` 生成 case，再跑 `xrunfk.py bm` |
+
+## 关键命令速查
+
+```bash
+# 0. pip 依赖
+pip install tabulate
+
+# 1. 生成用例 (从 xlsx → .cs/.json)
+python script/aclnn_create_json_new.py --op_name=<op> --case_file=excel/<op>.xlsx --sheet_name=level0 --use_bin=false --run_type=aclnn
+
+# 2. golden + NPU + 比对 (归一化一步到位)
+bash run.sh --op_name=<op> --case_file=excel/<op>.xlsx --sheet_name=level0 --exec_mode=npu --framework=aclnn --graphy_path=0 --use_bin=false --bm=bm --ti=0-0
+
+# 或分离式
+python3 xrunfk.py bm <op> <case_name>       # golden
+python3 xrunfk.py npu <op> <case_name>      # NPU
+python3 xrunfk.py compare <op> <case_name>  # 比对
+```
 
 ## 边界
 
 - 编译/报错 → ascendc-build-errors
 - 差异归因 → ascendc-kernel-semantics-researcher
 - golden 判据理论 + project golden 脚本 → ascendc-golden-testing
-- 本 skill 讲**官方 aclnn_fuzz 框架**（双标杆 + 单标杆 + 阈值配置）
+- 本 skill 讲**官方 aclnn_fuzz 框架**（结构 + 精度比对 + 新增算子适配 + 踩坑）
