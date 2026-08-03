@@ -1,0 +1,2 @@
+- [纯 PyTorch golden 双 oracle 互比模式](golden-pure-pytorch-double-oracle-pattern.md) — G3 类任务（不调 npu）的双独立 oracle 互比 + 离线机纯 python 结构性自检降级；单 oracle 自比是弱证据
+- [atk causal_conv1d golden 源位置](atk-causal-conv1d-golden-source.md) — continue/prefill 两 executor 的 oracle 语义等价；atk cpu 真值用 fp64；json 判据 cv_fused_double_benchmark 5/1.5/1.5

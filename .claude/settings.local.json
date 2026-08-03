@@ -322,7 +322,15 @@
       "Bash(sed -n '649,662p' D:/Desktop/Code/omni-ops/inference/ascendc/CMakeLists.txt)",
       "Bash(sed -n '661,662p' D:/Desktop/Code/omni-ops/inference/ascendc/CMakeLists.txt)",
       "Bash(xargs grep -ln \"opbuild_gen_default\\\\|npu_op_code_gen\\\\|function\\(opbuild\\\\|macro\\(opbuild\")",
-      "Bash(grep *)"
+      "Bash(grep *)",
+      "Bash(conda env *)",
+      "Bash(py -3.11 -c \"import torch,numpy; print\\('torch',torch.__version__,'np',numpy.__version__\\)\")",
+      "Bash(py -3.14 -c \"import torch; print\\(torch.__version__\\)\")",
+      "Bash(py -3.11 -c \"import numpy; print\\('numpy', numpy.__version__\\); import ml_dtypes; print\\('ml_dtypes', ml_dtypes.__version__\\)\")",
+      "Bash(py -3.11 -m pip install numpy ml_dtypes)",
+      "Bash(py -3.11 -c \"import numpy,ml_dtypes; print\\('numpy',numpy.__version__,'ml_dtypes',ml_dtypes.__version__\\)\")",
+      "Bash(py -3.11 selfcheck_shape_offset.py)",
+      "Bash(py -3.11 -c \"import ast,sys; ast.parse\\(open\\('golden_fused_causal_conv1d_mtp.py',encoding='utf-8'\\).read\\(\\)\\); print\\('syntax OK'\\)\")"
     ]
   }
 }
