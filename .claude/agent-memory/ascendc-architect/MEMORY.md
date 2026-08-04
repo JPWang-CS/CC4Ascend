@@ -41,6 +41,7 @@ AscendC 算子架构专家记忆。扁平文件模型：分类靠文件名前缀
 
 ## 通用知识：CANN 构建
 - [custom 构建陷阱](cann-custom-build-gotchas.md) — 自建 custom 包 tiling-parse 失败=legacy.so dlopen(非缺注册)；es whl 离线编 build-isolation 卡死与绕过
+- [binary opc_cmd 静默失败](binary-opc-silent-return-swallow.md) — build_binary_opc.sh 裸 return 吞 gen_task 退出码→空 opc_cmd.sh→OPC_NUM=0→1 variant；omni 已修 return+build.sh guard，nn 未修；真因是 op 未进 autogen ini/csv
 
 ## 工作流偏好
 - [AscendC 工作流偏好](ascendc-workflow-prefs.md) — 改码前先讨论达成一致、跑服务器前先取得同意、小步迭代、先改先编 ops-nn 再 ops-tensor

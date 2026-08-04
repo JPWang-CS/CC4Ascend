@@ -15,7 +15,7 @@ fused_causal_conv1d 投机 tokens 数扩展 — 项目侧 golden (G3)
             在本机无 torch_npu 时仍能给数值正确性证据
 
 oracle 继承来源（trace 行号）：
-    D:\Desktop\Code\CustomOP\atk\AiInfraFusedCausalConv1d\
+    D:/Desktop/Code/CustomOP/atk/AiInfraFusedCausalConv1d/
         executor_ai_infra_fused_causal_conv1d_continue.py:73-248  (decode 主用)
         executor_ai_infra_fused_causal_conv1d_pref.py:95-268      (prefill，语义等价)
 
@@ -514,50 +514,148 @@ class CaseData:
     dtype: str = "bf16"          # bf16 / fp16 / fp64
 
 
+# ============================================================
+# 矩阵常量（边界值取自规格，非魔鬼数字）
+# ============================================================
+# CUTBS/CUTBSD 切换阈值：MAX_DIM_CUTBSD = 3152（完整技术文档.md:232 纠正需求文档的 512 误导）
+# 阈值判定：dimSize >= 3152 → CUTBSD(TilingKey=0)，否则 → CUTBS(TilingKey=1)
+# dim 必须 % 16 == 0，所以边界两侧用 3136(< 3152, CUTBS) / 3152(=, CUTBSD) / 3168(>, CUTBSD)
+MAX_DIM_CUTBSD = 3152
+MIN_DIM = 64         # dim ∈ [64, 16384], dim % 16 == 0
+
+# A 层 dim 边界代表：MIN/小/中大/CUTBS-CUTBSD 切换两侧/极限
+DIM_CORE = [MIN_DIM, 1024, 3136, 3152, 3168, 16384]
+# B/C/D 层 dim 子集（降维）
+DIM_REP = [1024, 16384]
+DIM_ONE = [1024]
+
+
+def _accepted_reps(m: int) -> List[List[int]]:
+    """单 batch accepted 代表点（m=0 仅 prefill）。"""
+    if m == 0:
+        return [[0]]
+    return [
+        [0],                    # prefill
+        [1],                    # 单接受
+        [max(1, m // 4)],       # 偏小
+        [max(1, m // 2)],       # 中间
+        [max(1, 3 * m // 4)],   # 偏大
+        [m],                    # 满接受（= m）
+        [m + 1],                # 上界（m+1 = seqLen）
+    ]
+
+
 def build_casematrix() -> List[CaseData]:
     """
-    caseData 矩阵设计（覆盖需求 §1.2.3.3 泛化规格 m∈[0,16]）：
+    caseData 矩阵设计（v2，覆盖需求 §1.2.3.3 泛化规格 m∈[0,16]，扩 dtype/conv_mode/batch/dim 边界）。
 
-    维度覆盖：
-        m ∈ {0, 1, 7, 8, 12, 16}     边界 + 新增区间代表点
-        K ∈ {3, 6}                    windowSize 代表（小/大）
-        D ∈ {1024, 16384}             小/极限 dim（UB 压力）
-        accepted ∈ {0, 1, m//2, m+1}  prefill(0) / 单接受 / 中间 / 满接受
-        apc ∈ {on, off}
-        conv_mode = 1 (Pangu V2，主场景)
+    分层降维（避免全交叉爆炸，目标 300-600 cases）：
+        A 层（核心，全交叉）：
+            m ∈ [0,16] 全 17 值 × K{3,6} × D{64,1024,3136,3152,3168,16384}
+                  × accepted 代表点（prefill/单/偏小/中/偏大/满/上界）
+                  × apc{on,off} × dtype=bf16 × conv_mode=1
+            —— m 全覆盖 + CUTBS/CUTBSD 切换边界 + K 双值 + accepted 密集
+        B 层（dtype FP16，m 代表点）：
+            m{0,8,16} × K=3 × D{1024,16384} × accepted 代表 × apc{on,off}
+            × dtype=fp16 × conv_mode=1
+            —— FP16 路径覆盖（不同 ULP/舍入行为）
+        C 层（conv_mode=0 Qwen3-Next，m 代表点）：
+            m{0,8,16} × K=3 × D=1024 × accepted 代表 × apc{on,off}
+            × dtype=bf16 × conv_mode=0
+            —— Qwen3-Next 路径（无 conv_mode==1 reset 行为）
+        D 层（batch 多值，per-batch accepted 不同）：
+            m{8,16} × batch=4 × K=3 × D=1024 × apc{on,off}
+            × dtype=bf16 × conv_mode=1
+            —— per-batch num_accepted_tokens 各异（覆盖 batch 维独立性）
+
+    总规模估算：A 约 17*2*6*5*2 ≈ 1000（accepted 代表点 m=0 退化为 1，故实际 ~ 17*2*6*~5.7*2 ≈ 1000）
+                B 约 3*1*2*5*2 = 60
+                C 约 3*1*1*5*2 = 30
+                D 约 2*1*1*1*2 = 4（每 case batch=4，per-batch accepted 异）
+                合计 ~ 1100 cases。
     """
     cases: List[CaseData] = []
-    m_list = [0, 1, 7, 8, 12, 16]
-    K_list = [3, 6]
-    D_list = [1024, 16384]
 
-    for m in m_list:
-        for K in K_list:
-            for D in D_list:
-                # accepted 代表点（m=0 时只有 prefill=0）
-                if m == 0:
-                    acc_sets = [[0]]
-                else:
-                    acc_sets = [
-                        [0],                      # 全 prefill
-                        [1],                      # 单接受
-                        [max(1, m // 2)],         # 中间
-                        [m + 1],                  # 满接受（m+1 = seqLen）
-                    ]
-                for acc in acc_sets:
-                    batch = len(acc)
+    # ---- A 层：核心全交叉（m 全覆盖 + dim 边界 + K 双 + accepted 密集） ----
+    K_core = [3, 6]
+    for m in range(0, 17):                       # m ∈ [0,16] 全 17 值
+        for K in K_core:
+            for D in DIM_CORE:
+                for acc in _accepted_reps(m):
+                    batch = 1
                     for apc in (False, True):
                         nm = (
-                            f"m{m:02d}_K{K}_D{D}_acc{'-'.join(str(a) for a in acc)}"
-                            f"_apc{int(apc)}_pangu"
+                            f"A_m{m:02d}_K{K}_D{D}_acc{acc[0]}"
+                            f"_apc{int(apc)}_bf16_pangu"
                         )
                         cases.append(CaseData(
                             name=nm, m=m, K=K, D=D, batch=batch,
                             accepted=acc, apc=apc,
                             conv_mode=1, residual=True, block_size=128,
-                            num_computed=[0] * batch,  # 首 token 零初始化 cache
+                            num_computed=[0] * batch,
                             dtype="bf16",
                         ))
+
+    # ---- B 层：dtype FP16（m 代表点 + 双 D） ----
+    m_rep = [0, 8, 16]
+    for m in m_rep:
+        for D in DIM_REP:
+            for acc in _accepted_reps(m):
+                for apc in (False, True):
+                    nm = (
+                        f"B_m{m:02d}_K3_D{D}_acc{acc[0]}"
+                        f"_apc{int(apc)}_fp16_pangu"
+                    )
+                    cases.append(CaseData(
+                        name=nm, m=m, K=3, D=D, batch=1,
+                        accepted=acc, apc=apc,
+                        conv_mode=1, residual=True, block_size=128,
+                        num_computed=[0],
+                        dtype="fp16",
+                    ))
+
+    # ---- C 层：conv_mode=0 (Qwen3-Next) ----
+    for m in m_rep:
+        for acc in _accepted_reps(m):
+            for apc in (False, True):
+                nm = (
+                    f"C_m{m:02d}_K3_D1024_acc{acc[0]}"
+                    f"_apc{int(apc)}_bf16_qwen"
+                )
+                cases.append(CaseData(
+                    name=nm, m=m, K=3, D=1024, batch=1,
+                    accepted=acc, apc=apc,
+                    conv_mode=0, residual=True, block_size=128,
+                    num_computed=[0],
+                    dtype="bf16",
+                ))
+
+    # ---- D 层：batch 多值，per-batch accepted 各异 ----
+    for m in [8, 16]:
+        for apc in (False, True):
+            # per-batch accepted 故意各异：覆盖 prefill(0)/单(1)/中间/满 全在一个 batch 内
+            cap = min(m, 4) if m > 0 else 0
+            if m == 0:
+                acc_multi = [0, 0, 0, 0]
+            else:
+                # 选 4 个差异化的 per-batch accepted（不超过 m+1）
+                cand = sorted({0, 1, max(1, m // 2), m, m + 1})[:4]
+                acc_multi = (cand * 4)[:4]
+                while len(set(acc_multi)) < 2:  # 保证有差异
+                    acc_multi[-1] = min(m + 1, acc_multi[-1] + 1)
+            nm = (
+                f"D_m{m:02d}_K3_D1024_b4_acc"
+                f"{'-'.join(str(a) for a in acc_multi)}"
+                f"_apc{int(apc)}_bf16_pangu"
+            )
+            cases.append(CaseData(
+                name=nm, m=m, K=3, D=1024, batch=len(acc_multi),
+                accepted=acc_multi, apc=apc,
+                conv_mode=1, residual=True, block_size=128,
+                num_computed=[0] * len(acc_multi),
+                dtype="bf16",
+            ))
+
     return cases
 
 
@@ -761,8 +859,11 @@ def main():
 
     cases = build_casematrix()
     print(f"caseData 矩阵: {len(cases)} cases")
-    print(f"  m ∈ {{0,1,7,8,12,16}} × K ∈ {{3,6}} × D ∈ {{1024,16384}} "
-          f"× accepted代表点 × apc {{on,off}}")
+    print(f"  A 层: m∈[0,16]全 × K{{3,6}} × D{{64,1024,3136,3152,3168,16384}} "
+          f"× accepted代表 × apc{{on,off}} × bf16 × pangu")
+    print(f"  B 层: m{{0,8,16}} × K3 × D{{1024,16384}} × accepted代表 × apc{{on,off}} × fp16 × pangu")
+    print(f"  C 层: m{{0,8,16}} × K3 × D1024 × accepted代表 × apc{{on,off}} × bf16 × qwen(conv_mode=0)")
+    print(f"  D 层: m{{8,16}} × batch4 per-batch accepted各异 × apc{{on,off}} × bf16 × pangu")
     print()
 
     # 阶段 1：双 oracle 自洽（本机可跑）
