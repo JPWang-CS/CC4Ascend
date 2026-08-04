@@ -332,7 +332,9 @@
       "Bash(py -3.11 selfcheck_shape_offset.py)",
       "Bash(py -3.11 -c \"import ast,sys; ast.parse\\(open\\('golden_fused_causal_conv1d_mtp.py',encoding='utf-8'\\).read\\(\\)\\); print\\('syntax OK'\\)\")",
       "Bash(sed -n '155,170p' inference/ascendc/src/ops-transformer/attention/ai_infra_fused_causal_conv1d/op_host/ai_infra_fused_causal_conv1d_tiling.cpp)",
-      "Bash(sed -n '240,255p' inference/ascendc/src/ops-transformer/attention/ai_infra_fused_causal_conv1d/op_host/ai_infra_fused_causal_conv1d_tiling.cpp)"
+      "Bash(sed -n '240,255p' inference/ascendc/src/ops-transformer/attention/ai_infra_fused_causal_conv1d/op_host/ai_infra_fused_causal_conv1d_tiling.cpp)",
+      "Bash(sed -n '370,400p' \"D:/Desktop/Code/omni-ops/inference/ascendc/src/ops-transformer/attention/ai_infra_fused_causal_conv1d/op_kernel/ai_infra_fused_causal_conv1d_update.h\")",
+      "Bash(sed -n '505,550p' \"D:/Desktop/Code/omni-ops/inference/ascendc/src/ops-transformer/attention/ai_infra_fused_causal_conv1d/op_kernel/ai_infra_fused_causal_conv1d_update.h\")"
     ]
   }
 }

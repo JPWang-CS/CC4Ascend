@@ -512,6 +512,8 @@ class CaseData:
     block_size: int
     num_computed: List[int]      # per-batch，None 用 [0]*batch 表示首 token
     dtype: str = "bf16"          # bf16 / fp16 / fp64
+    max_draft_tokens: Optional[int] = 7   # None=缺省不传；int=显式档位；npu 调用传 max(档位, m) 保证层3通过
+    expect_fail: bool = False             # 非法调用：npu 阶段期望被拒（层2/层3），自洽阶段跳过
 
 
 # ============================================================
@@ -567,12 +569,20 @@ def build_casematrix() -> List[CaseData]:
             m{8,16} × batch=4 × K=3 × D=1024 × apc{on,off}
             × dtype=bf16 × conv_mode=1
             —— per-batch num_accepted_tokens 各异（覆盖 batch 维独立性）
+        E 层（maxDraftTokens 缺省调用，max_draft_tokens=None）：
+            m{0,8,16} × K{3,6} × D{1024,16384} × accepted代表 × apc{on,off}
+            × dtype=bf16 × conv_mode=1
+            —— 数学语义上 maxDraftTokens 不参与卷积（只影响 UB 预算），
+               oracle 输出与显式传 7 完全一致；本层标记"不传该参数"，
+               npu 比对阶段调用 torch op 时不传 max_draft_tokens kwarg，
+               验证 schema 默认值 =7 + binding value_or(7) 链路（缺省=7 语义）
 
     总规模估算：A 约 17*2*6*5*2 ≈ 1000（accepted 代表点 m=0 退化为 1，故实际 ~ 17*2*6*~5.7*2 ≈ 1000）
                 B 约 3*1*2*5*2 = 60
                 C 约 3*1*1*5*2 = 30
                 D 约 2*1*1*1*2 = 4（每 case batch=4，per-batch accepted 异）
-                合计 ~ 1100 cases。
+                E 约 3*2*2*5*2 = 120（accepted 代表点 m=0 退化）
+                合计 ~ 1214 cases。
     """
     cases: List[CaseData] = []
 
@@ -655,6 +665,73 @@ def build_casematrix() -> List[CaseData]:
                 num_computed=[0] * len(acc_multi),
                 dtype="bf16",
             ))
+
+    # ---- E 层：maxDraftTokens 缺省调用（不传该参数，schema 默认 7） ----
+    # 缺省=7 只对 m≤7 合法（tiling 层3: multiTokenNum > maxDraftTokens 被拒），故 m 取 [0,7] 代表。
+    # oracle 不感知 maxDraftTokens（纯数学卷积），自洽阶段输出与显式传 7 一致；
+    # npu 比对阶段"不传 kwarg"调用 torch op，验证 schema 默认值 =7 + binding value_or(7)。
+    m_rep_noparam = [0, 3, 7]
+    for m in m_rep_noparam:
+        for K in K_core:
+            for D in DIM_REP:
+                for acc in _accepted_reps(m):
+                    for apc in (False, True):
+                        nm = (
+                            f"E_m{m:02d}_K{K}_D{D}_acc{acc[0]}"
+                            f"_apc{int(apc)}_bf16_pangu_noparam"
+                        )
+                        cases.append(CaseData(
+                            name=nm, m=m, K=K, D=D, batch=1,
+                            accepted=acc, apc=apc,
+                            conv_mode=1, residual=True, block_size=128,
+                            num_computed=[0],
+                            dtype="bf16",
+                            max_draft_tokens=None,
+                        ))
+
+    # ---- F 层：maxDraftTokens 全值域 [0,16] 显式传参 ----
+    # 每个 maxDT 值都测：m=0（prefill 退化）+ m=maxDT（满配，恰在层3合法边界 m≤maxDT）。
+    # 验证：任意 maxDT ∈ [0,16] 合法（层2）+ m=maxDT 恰好通过层3 + UB 按 maxDT 分配。
+    for maxDT in range(0, 17):
+        for m in sorted({0, maxDT}):
+            for acc in _accepted_reps(m):
+                for apc in (False, True):
+                    nm = (
+                        f"F_md{maxDT:02d}_m{m:02d}_K3_D1024_acc{acc[0]}"
+                        f"_apc{int(apc)}_bf16_pangu"
+                    )
+                    cases.append(CaseData(
+                        name=nm, m=m, K=3, D=1024, batch=1,
+                        accepted=acc, apc=apc,
+                        conv_mode=1, residual=True, block_size=128,
+                        num_computed=[0],
+                        dtype="bf16",
+                        max_draft_tokens=maxDT,
+                    ))
+
+    # ---- G 层：非法调用拦截（期望被 tiling 拒） ----
+    # oracle 不拦截（纯数学卷积），故跳过自洽；npu 阶段断言调用失败。
+    # 层2 越界: maxDraftTokens ∉ [0,16]；层3 越界: m > maxDraftTokens。
+    invalid_cases = [
+        # (name, m, K, maxDT)
+        ("G_md_neg1_K3", 0, 3, -1),    # 层2 下界: maxDT < 0
+        ("G_md_17_K3", 0, 3, 17),      # 层2 上界: maxDT > 16
+        ("G_m_gt0_K3", 1, 3, 0),       # 层3: m=1 > maxDT=0
+        ("G_m_gt7_K3", 8, 3, 7),       # 层3: m=8 > 缺省档 7
+        ("G_m_gt16_K3", 17, 3, 16),    # 层3: m=17 > maxDT=16
+        ("G_m_gt7_K6", 8, 6, 7),       # 层3 K6 变体
+    ]
+    for nm, m, K, maxDT in invalid_cases:
+        cases.append(CaseData(
+            name=nm, m=m, K=K, D=1024, batch=1,
+            accepted=[0] if m == 0 else [m],
+            apc=False,
+            conv_mode=1, residual=True, block_size=128,
+            num_computed=[0],
+            dtype="bf16",
+            max_draft_tokens=maxDT,
+            expect_fail=True,
+        ))
 
     return cases
 
@@ -795,6 +872,10 @@ def run_double_oracle_selfcheck(cases: List[CaseData], seed_base: int = 20260803
     thr = (5.0, 1.5, 1.5)  # 双标杆阈值（参考用；自洽比值预期 << 阈值）
 
     for ci, case in enumerate(cases):
+        if case.expect_fail:
+            lines.append(f"[SKIP] {case.name}  (非法调用, npu 阶段验拦截)")
+            n_pass += 1
+            continue
         seed = seed_base + ci
         inp = materialize_case(case, seed)
 
@@ -864,6 +945,12 @@ def main():
     print(f"  B 层: m{{0,8,16}} × K3 × D{{1024,16384}} × accepted代表 × apc{{on,off}} × fp16 × pangu")
     print(f"  C 层: m{{0,8,16}} × K3 × D1024 × accepted代表 × apc{{on,off}} × bf16 × qwen(conv_mode=0)")
     print(f"  D 层: m{{8,16}} × batch4 per-batch accepted各异 × apc{{on,off}} × bf16 × pangu")
+    print(f"  E 层: m{{0,3,7}} × K{{3,6}} × D{{1024,16384}} × accepted代表 × apc{{on,off}} "
+          f"× bf16 × pangu × maxDraftTokens缺省(不传,默认7)")
+    print(f"  F 层: maxDraftTokens全值域[0,16] × m{{0,maxDT}} × K3 × D1024 × accepted代表 "
+          f"× apc{{on,off}} × bf16 × pangu × 显式传maxDT")
+    print(f"  G 层: 非法调用拦截 6 case（层2越界 maxDT{{-1,17}} + 层3越界 m>maxDT{{0,7,16}}）"
+          f"× K{{3,6}}——自洽SKIP, npu 阶段断言被拒")
     print()
 
     # 阶段 1：双 oracle 自洽（本机可跑）
@@ -896,6 +983,12 @@ def main():
         else:
             print("TODO: binding 落地后接入（调用 torch.ops.custom.npu_ai_infra_fused_causal_conv1d）")
             # 占位：待 binding + maxDraftTokens 落地后补 npu 调用 + ratio 比对
+            # max_draft_tokens 调用约定（需求 :432 可选性验收 + tiling 层3 约束）：
+            #   case.expect_fail（G 层）→ 调用期望失败（aclnn 非 SUCCESS / torch 抛异常），验证层2/层3 拦截
+            #   case.max_draft_tokens is None（E 层）→ 不传该 kwarg（schema 默认 7 生效，value_or(7)）
+            #   其余层 → 显式传 max_draft_tokens=max(7, case.m)
+            #   （层3: multiTokenNum > maxDraftTokens 被拒，显式传参必须 ≥ m；m≤7 传 7，m>7 传 m）
+            # 判据：缺省/显式两路输出 vs oracle ratio 一致 → "缺省 = 显式 7"；G 层调用被拒 → 拦截生效
 
     print()
     print("=" * 78)
