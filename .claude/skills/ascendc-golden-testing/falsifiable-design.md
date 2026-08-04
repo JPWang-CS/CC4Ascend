@@ -56,6 +56,18 @@ assert not passed  # 若 passed，说明判据/harness 有问题
 - 要多 shape / 多 dtype / 多模式都 PASS
 - 边界 case 单独标注（擦边的要警觉）
 
+## 只影响 tiling/UB 预算的参数（oracle 不感知）
+
+有的参数（如 UB 上限类）只影响 tiling 分配，**不参与数学计算**——纯数学 oracle 感知不到它，数值层验证无效（传任何值输出都一样）。这类参数的 golden 验证拆三层：
+
+1. **合法值域全覆盖**：参数全值域 × 关键 m 点，边界处各一侧（恰好合法 / 恰好非法）
+2. **缺省链路**：不传参数（None）vs 显式传默认值，两路调用输出必须一致 → 验证 schema 默认值 + binding `value_or`
+3. **非法拦截**：`expect_fail` 标记的用例，**自洽阶段 SKIP**（oracle 不拦截、数学无意义），npu 阶段断言调用被拒 → 验证 tiling 校验真实生效
+
+注意：缺省参数带硬上限时，缺省只对「实际值 ≤ 默认值」的调用合法（如缺省 7 只配 m≤7，m>7 必须显式传 ≥m）。
+
+实践见 `projects/omni-fused_causal_conv1d算子新增投机tokens数参数/golden/golden_fused_causal_conv1d_mtp.py`（E/F/G 三层）。
+
 ## 来源
 - agent memory `golden-falsifiable-testing` / `repo-mxfp4-tests-broken`
 - `projects/MM-确定性/test_matmul_golden.py` 实践

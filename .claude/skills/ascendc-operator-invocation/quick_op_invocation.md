@@ -82,6 +82,18 @@ Init(device, stream)
   - 实际跑到的是不是新包/新 `.so`
 - 若出现 checker / stale package / 未生效问题，转看 `ascendc-build-errors`（落地后回链）
 
+### 3.5 aclnn 新增"可选" attr 的真相
+
+aclnn 是 `extern "C"` 接口，**没有默认参数机制**——所有 attr（包括文档标"可选输入"的）都是 GetWorkspaceSize 的位置参数，调用方必须显式传；"可选"在 aclnn 层的真实语义是「传默认值 = 不启用新行为」。
+
+**新增 attr 到 aclnn 签名 → 所有编译期调用点必须补参数**（test_aclnn_*.cpp、binding、atk executor），否则编译不过。这是 C 接口的硬约束，不是"必传"语义。
+
+"可选"只在 **torch/schema 层**兑现：
+- schema `m.def` 给默认值：`int max_draft_tokens=7`
+- binding 用 `c10::optional` + `value_or(7)`
+
+**验证"可选性"看 torch 层**（不传 kwarg 能跑且行为 = 默认值），不看 aclnn 层。需求文档写的"可选入参 + 默认值"对应的是 torch 接口形态；若需求给的是 aclnn 签名，位置参数列表里必然出现该参数，两者不矛盾。
+
 ---
 
 ## 4. GE graph 通路

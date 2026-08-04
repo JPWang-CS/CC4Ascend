@@ -26,6 +26,7 @@ description: AscendC golden 对拍的判据、输入构造、输出规范、可�
 | 构造输入避免量化误差 | input-construction.md「先舍 dtype」 |
 | 规范对拍输出 | output-format.md |
 | 防止假 PASS | falsifiable-design.md |
+| 只影响 tiling/UB 预算的参数（oracle 不感知）怎么验证 | falsifiable-design.md「只影响 tiling/UB 预算的参数」 |
 
 ## 边界
 - 编译/报错 → ascendc-build-errors
