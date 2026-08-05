@@ -33,6 +33,76 @@
 
 ---
 
+## 2.1 改动前 vs 改动后：UB 开销对比（实际代码举证）
+
+> **改动前基线** = commit `4bdf4e0f`（!52 add fused_causal_conv1d）：`tiling.h:81` `MAX_DECODE_LEN = 8`、`:85` `MAX_M = 7`，**无 maxDraftTokens**（`git show 4bdf4e0f:.../tiling.h`）。
+> **改动后** = 当前 fc 分支：`MAX_DECODE_LEN = 17`、`MAX_M = 16`，新增 `maxDraftTokens`（`tiling.cpp:276-278` effectiveStateLen）。
+
+**关键事实：UB 预算公式本身一字未改**——`GenerateInfo()` 里 Update/CUTBS/CUTBSD 三段（`tiling.cpp:550-627`）与改动前（`git show 4bdf4e0f:.../tiling.cpp` 同段）**逐行一致**。唯一变化是 `stateLen` 的取值范围变大了（m≤16 而非 m≤7），以及 effectiveStateLen 让 UB 可按 maxDT 预分配。**所以"改动后 m=16 会溢出吗"这个问题，等价于"m=16 时预算公式还能收敛到 ≤256KB 吗"——答案见下表（全部 ≤ 上限，且余量 ≥ 0）。**
+
+### Update 路径（decode/MTP 主路径）对比
+
+预算：`spaceWithDim = 2·dt + K·4 + stateLen·dt + dt + K·4 + 4`（tiling.cpp:616-623），`maxDim = (262144-1024)/spaceWithDim/16·16`。
+
+| 版本 | K | m | stateLen | spaceWithDim | maxDim | 单核占 | 剩余 |
+|---|---|---|---|---|---|---|---|
+| 改动前 | 3 | 7 | 9 | 52 | 5008 | 260416 | 704 |
+| 改动前 | 6 | 7 | 12 | 82 | 3184 | 261088 | 32 |
+| 改动后 | 3 | 16 | 18 | 70 | 3728 | 260960 | 160 |
+| 改动后 | 6 | 16 | 21 | 100 | 2608 | 260800 | 320 |
+
+**结论**：改动后 m=16 的单核占（260800~260960）与改动前 m=7（260416~261088）**几乎持平，且都在 261120 预算内**——因为 m 变大只让 `stateLen` 项变大、`maxDim` 反比收缩，乘积（单核占）收敛到同一水平。**m 翻倍不导致 UB 翻倍，而是核切分变细。**
+
+### CUTBS 路径（prefill dim<3152）对比
+
+预算：`cacheQue = 2·stateLen·dt·512`、`cacheBuf = stateLen·dt·512`（tiling.cpp:588,592），`ubFactor = (262144-512-固定项)/行成本`（:600）。
+
+| 版本 | K | stateLen | 固定项 | ubFactor | 单核占 | 剩余 |
+|---|---|---|---|---|---|---|
+| 改动前 | 3 | 9 | 54272 | **40** | 259584 | 2560 |
+| 改动后 | 3 | 18 | 81920 | **35** | 261632 | 512 |
+| 改动前 | 6 | 12 | 94208 | **32** | 258560 | 3584 |
+| 改动后 | 6 | 21 | 121856 | **27** | 260608 | 1536 |
+
+**结论**：m 7→16 让 `cacheQue+cacheBuf` 从 45KB 增至 90KB（K=3 双缓冲），但 `ubFactor` 从 40 降到 35（K=3）/ 32 降到 27（K=6），**单核总占仍 ≤ 262144**。ubFactor 缩水 = 每轮处理的 token 变少 = 循环次数增多 = **性能代价**，但**不溢出**。
+
+### CUTBSD 路径
+
+改动前后 buffer 均不含 `stateLen`（tiling.cpp:550-557），**零变化**，不列出。
+
+### maxDraftTokens 对 stateLen 的影响（effectiveStateLen，tiling.cpp:276-278）
+
+| K | maxDT=7（默认） | maxDT=16 |
+|---|---|---|
+| 3 | 9（= 改动前 m=7 的 stateLen） | 18 |
+| 6 | 12（= 改动前 m=7 的 stateLen） | 21 |
+
+**兼容性铁证**：默认 maxDT=7 时 `effectiveStateLen = max(stateLen, 9)`，对 m≤7 的旧调用 → 9 → **与改动前（m=7, stateLen=9）完全相同的预算**（上表第一行），性能零劣化（需求验收标准）。只有显式传 maxDT=16 才按 m=16 预算（已验证不溢出）。
+
+### 小结
+
+```
+改动前最坏（m=7, K=6）:  Update 261088 B | CUTBS 258560 B  ← 全部在 256KB 内
+改动后最坏（m=16, K=6）: Update 260800 B | CUTBS 260608 B  ← 全部在 256KB 内
+UB 从 256KB 里分给 stateLen 的部分最多翻倍，但 tiling 用 maxDim/ubFactor 收缩抵消，
+单核总占几乎不变 → 改动后与改动前同样安全（且都 < 262144）
+```
+
+### kernel 侧举证（`InitBuffer` 一字未改）
+
+不只是 tiling 预算公式没改，**kernel 的 buffer 分配代码也没改**——改动前（`git show 4bdf4e0f`）与改动后（当前 fc）的 `InitBuffer` 逐行一致：
+
+| kernel | 改动前 buffer（4bdf4e0f 行） | 改动后（当前行） | 差异 |
+|---|---|---|---|
+| Update `convStatesQueue_` | `stateLen_ * curDim_ * sizeof(DTYPE)`（:98） | 同（update.h:98） | **无** |
+| CUTBS `cacheQue` | `2 × stateLen × baseDim × dtype`（:84） | 同（fn_cutbs.h:84） | **无** |
+| CUTBS `cacheBuf` | `stateLen × baseDim × dtype`（:90） | 同（fn_cutbs.h:90） | **无** |
+| CUTBSD 全部 | 不含 stateLen（:81-93） | 同 | **无** |
+
+**含义**：kernel 侧 buffer 大小**完全由 tiling data 的 `stateLen` 驱动**，改动只是让 tiling 可能传出更大的 `stateLen`（≤21），而分配逻辑本身未变。**"改动前 m=7 不溢出"是已上板验证过的事实；改动后 m=16 只是把同一个已验证的公式用更大的 stateLen 跑一遍，且 §2.1 数值证明单核总占仍在 256KB 内。**
+
+---
+
 ## 3. TilingKey 2（Update，decode/MTP 主路径）—— 本次重点
 
 ### 3.1 kernel 实际分配（`update.h:96-104`）
